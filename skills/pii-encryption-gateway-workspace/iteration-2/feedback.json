@@ -1,0 +1,30 @@
+{
+  "reviews": [
+    {
+      "run_id": "eval-attendance-notices-with_skill-run-1",
+      "feedback": "\ud300\uba85\ub3c4 \uc554\ud638\ud654 \uace0\ub824 \ud544\uc694",
+      "timestamp": "2026-06-04T13:48:14.268Z"
+    },
+    {
+      "run_id": "eval-bonus-deposit-with_skill-run-1",
+      "feedback": "\uc870\uc218\ube48\uacfc \uac19\uc740 \uc774\ub984\uc774 \uc788\uc74c.",
+      "timestamp": "2026-06-04T13:48:14.268Z"
+    },
+    {
+      "run_id": "eval-bonus-deposit-without_skill-run-1",
+      "feedback": "\uacc4\uc88c\ubc88\ud638\uc640 \uc774\ub984\uc774 \uc788\uc74c",
+      "timestamp": "2026-06-04T13:48:14.268Z"
+    },
+    {
+      "run_id": "eval-dept-structure-report-with_skill-run-1",
+      "feedback": "\ud300\uba85\ub3c4 \uc554\ud638\ud654 \ud544\uc694",
+      "timestamp": "2026-06-04T13:48:14.268Z"
+    },
+    {
+      "run_id": "eval-salary-notice-without_skill-run-1",
+      "feedback": "\uc2e0\ub2e4\uc740 \uc774\ub77c\ub294 \uc774\ub984\uc774 \ub178\ucd9c\ub418\uba74 \uc548 \ub428",
+      "timestamp": "2026-06-04T13:48:14.268Z"
+    }
+  ],
+  "status": "in_progress"
+}

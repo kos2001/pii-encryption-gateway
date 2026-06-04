@@ -1,0 +1,20 @@
+{
+  "reviews": [
+    {
+      "run_id": "eval-attendance-notices-with_skill-run-1",
+      "feedback": "look great",
+      "timestamp": "2026-06-04T13:43:52.116Z"
+    },
+    {
+      "run_id": "eval-attendance-notices-without_skill-run-1",
+      "feedback": "\uc7a5\ub3c4\uc724 \uacfc \uac19\uc740 \uc0ac\ub78c\uc774 \uc774\ub984\uc774 \uc788\uc74c.",
+      "timestamp": "2026-06-04T13:43:52.116Z"
+    },
+    {
+      "run_id": "eval-dept-structure-report-with_skill-run-1",
+      "feedback": "\uc774\uba54\uc77c \uc8fc\uc18c \ubc0f \ud68c\uc0ac\uc5d0\uc11c \uc0ac\uc6a9\ud558\ub294 id\ub4f1\uc758 \uc608\uc81c\uac00 \uc5c6\uc74c",
+      "timestamp": "2026-06-04T13:43:52.116Z"
+    }
+  ],
+  "status": "in_progress"
+}
