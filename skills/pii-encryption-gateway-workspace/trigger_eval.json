@@ -1,0 +1,23 @@
+[
+  {"query": "인사팀에서 받은 employees.csv에 직원 40명 연봉이랑 주민번호가 들어있는데, 사번 E0007한테 보낼 2026년 연봉 인상 안내 메일 좀 써줘. 이름이랑 확정 연봉 넣어서.", "should_trigger": true},
+  {"query": "영업팀 직원들한테 이번 분기 지각/결근/연차 사용 현황 개인별로 정리해서 통지문 만들어줘. 데이터는 ~/Downloads/근태_2026Q1.xlsx 에 있어", "should_trigger": true},
+  {"query": "직원 급여대장 엑셀 파일이 있는데 이걸로 각자 계좌에 상여금 입금 안내 문자를 보내려고 해. 이름이랑 계좌번호 들어가게 메시지 만들어줘", "should_trigger": true},
+  {"query": "이 HR 데이터로 작업해야 하는데 연봉이나 주민등록번호 같은 민감정보가 모델한테 그대로 노출되는게 걱정돼. 안전하게 처리하면서 부서별 안내문 작성 가능해?", "should_trigger": true},
+  {"query": "회사에서 받은 직원명부(이름, 전화번호, 이메일, 계좌 포함)로 개인별 복지포인트 지급 안내를 만들어야 하는데 개인정보 보호하면서 해줘", "should_trigger": true},
+  {"query": "payroll.json 파일에 employee salaries and resident registration numbers가 들어있어. 각 직원한테 보낼 연봉 명세 요약을 만들어줘, 민감정보는 LLM에 안 보이게", "should_trigger": true},
+  {"query": "근태 기록 csv 가지고 결근 잦은 사람들한테 보낼 개인 면담 요청 메일을 직원별로 써야 하는데, 이름이랑 결근일수가 들어가야 해", "should_trigger": true},
+  {"query": "직원 개인정보 스프레드시트(연봉/계좌/주민번호)를 가지고 개인별 원천징수 안내문을 작성하려는데 이 정보들이 외부 모델로 새나가면 안 돼", "should_trigger": true},
+  {"query": "employees.csv 있는데 여기 직원들 대상으로 사번별 맞춤 안내 이메일 좀 만들어줘", "should_trigger": true},
+  {"query": "민감한 개인정보 다루는 작업인데 담당자 키로 암호화해서 처리하고 결과만 복호화해서 보고 싶어", "should_trigger": true},
+
+  {"query": "우리 회사 2026년 1분기 부서별 매출 실적 데이터로 성장률 분석하고 차트 만들어줘", "should_trigger": false},
+  {"query": "Python에서 AES-256으로 파일 암호화하는 코드 예제 좀 보여줘. cryptography 라이브러리 쓰는 법", "should_trigger": false},
+  {"query": "팀 비밀번호를 안전하게 공유하려는데 어떤 패스워드 매니저가 좋을까? Bitwarden이랑 1Password 비교해줘", "should_trigger": false},
+  {"query": "신입 개발자 채용 공고를 작성하려고 해. 직무는 백엔드, 경력 3년 이상, 연봉은 협의 라고 넣어줘", "should_trigger": false},
+  {"query": "사내 위키에 올릴 개인정보 보호 정책 가이드 문서를 작성해줘. GDPR이랑 개인정보보호법 핵심 요건 위주로", "should_trigger": false},
+  {"query": "익명으로 수집한 직원 만족도 설문 응답 500건을 항목별로 집계하고 평균 점수 내줘. 응답에 이름은 없어", "should_trigger": false},
+  {"query": "제품 재고 inventory.csv 파일에서 품목별 재고 수량 합계랑 부족 품목 리스트 뽑아줘", "should_trigger": false},
+  {"query": "nginx에 SSL 인증서 설정해서 https 적용하는 방법 알려줘. Let's Encrypt 사용", "should_trigger": false},
+  {"query": "데이터베이스에 사용자 비밀번호 저장할 때 bcrypt로 해싱하는 게 맞아? 솔트는 어떻게 관리해?", "should_trigger": false},
+  {"query": "부서별 인원수만 세서 조직도 그려줘. 데이터는 부서 이름이랑 인원수 두 컬럼밖에 없어", "should_trigger": false}
+]

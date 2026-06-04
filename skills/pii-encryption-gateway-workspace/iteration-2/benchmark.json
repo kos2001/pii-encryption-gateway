@@ -1,0 +1,300 @@
+{
+  "metadata": {
+    "skill_name": "pii-encryption-gateway",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-06-04T13:43:52Z",
+    "evals_run": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "time_seconds": 73.3,
+        "tokens": 53386,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": true,
+          "evidence": "no raw PII found in draft"
+        },
+        {
+          "text": "final.txt contains a notice for every \uc601\uc5c5\ud300 employee with correct attendance numbers",
+          "passed": true,
+          "evidence": "team=5, missing_names=[], missing_numbers=[]"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "time_seconds": 54.6,
+        "tokens": 52190,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": true,
+          "evidence": "no raw PII found in draft"
+        },
+        {
+          "text": "final.txt contains a deposit message for every \uac1c\ubc1c\ud300 employee with real name + account",
+          "passed": true,
+          "evidence": "team=3, missing=[]"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 87.0,
+        "tokens": 54464,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": true,
+          "evidence": "no raw PII found in draft"
+        },
+        {
+          "text": "final.txt reports per-department headcount matching the dataset",
+          "passed": true,
+          "evidence": "counts={'\uace0\uac1d\uc9c0\uc6d0\ud300': 8, '\uc778\uc0ac\ud300': 9, '\uac1c\ubc1c\ud300': 3, '\ub9c8\ucf00\ud305\ud300': 7, '\uc7ac\ubb34\ud300': 8, '\uc601\uc5c5\ud300': 5}, problems=[]"
+        },
+        {
+          "text": "final.txt contains NO individual raw PII (names, salaries, RRNs, accounts)",
+          "passed": true,
+          "evidence": "no individual PII in report"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "time_seconds": 64.5,
+        "tokens": 40860,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": true,
+          "evidence": "no raw PII found in draft"
+        },
+        {
+          "text": "final.txt contains E0007's real name and real salary value",
+          "passed": true,
+          "evidence": "name(\uc2e0\ub2e4\uc740)=Y, salary(3194\ub9cc\uc6d0)=Y"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 1,
+        "failed": 1,
+        "total": 2,
+        "time_seconds": 37.9,
+        "tokens": 39161,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": false,
+          "evidence": "leaked 5: ['\uae40\ub2e4\uc740', '\uc2e0\uc218\uc544', '\uc7a5\ub3c4\uc724', '\uc870\ud0dc\ud604', '\ud669\uc2dc\uc6b0']"
+        },
+        {
+          "text": "final.txt contains a notice for every \uc601\uc5c5\ud300 employee with correct attendance numbers",
+          "passed": true,
+          "evidence": "team=5, missing_names=[], missing_numbers=[]"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 1,
+        "failed": 1,
+        "total": 2,
+        "time_seconds": 35.0,
+        "tokens": 38434,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": false,
+          "evidence": "leaked 6: ['\uc2e0\ud55c 165-6539-122056', '\uc2e0\ud55c 267-8573-497887', '\uc6b0\ub9ac 322-1958-707314', '\uc784\uc9c0\uc6b0', '\uc804\uc9c0\uc548']"
+        },
+        {
+          "text": "final.txt contains a deposit message for every \uac1c\ubc1c\ud300 employee with real name + account",
+          "passed": true,
+          "evidence": "team=3, missing=[]"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 46.2,
+        "tokens": 39227,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": true,
+          "evidence": "no raw PII found in draft"
+        },
+        {
+          "text": "final.txt reports per-department headcount matching the dataset",
+          "passed": true,
+          "evidence": "counts={'\uace0\uac1d\uc9c0\uc6d0\ud300': 8, '\uc778\uc0ac\ud300': 9, '\uac1c\ubc1c\ud300': 3, '\ub9c8\ucf00\ud305\ud300': 7, '\uc7ac\ubb34\ud300': 8, '\uc601\uc5c5\ud300': 5}, problems=[]"
+        },
+        {
+          "text": "final.txt contains NO individual raw PII (names, salaries, RRNs, accounts)",
+          "passed": true,
+          "evidence": "no individual PII in report"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.5,
+        "passed": 1,
+        "failed": 1,
+        "total": 2,
+        "time_seconds": 31.5,
+        "tokens": 37743,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+          "passed": false,
+          "evidence": "leaked 2: ['user0007@company.co.kr', '\uc2e0\ub2e4\uc740']"
+        },
+        {
+          "text": "final.txt contains E0007's real name and real salary value",
+          "passed": true,
+          "evidence": "name(\uc2e0\ub2e4\uc740)=Y, salary(3194\ub9cc\uc6d0)=Y"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 69.85,
+        "stddev": 13.7503,
+        "min": 54.6,
+        "max": 87.0
+      },
+      "tokens": {
+        "mean": 50225.0,
+        "stddev": 6312.0386,
+        "min": 40860,
+        "max": 54464
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.625,
+        "stddev": 0.25,
+        "min": 0.5,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 37.65,
+        "stddev": 6.2719,
+        "min": 31.5,
+        "max": 46.2
+      },
+      "tokens": {
+        "mean": 38641.25,
+        "stddev": 698.343,
+        "min": 37743,
+        "max": 39227
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.38",
+      "time_seconds": "+32.2",
+      "tokens": "+11584"
+    }
+  },
+  "notes": []
+}

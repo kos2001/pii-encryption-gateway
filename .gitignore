@@ -1,0 +1,10 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Eval run artifacts (reproducible). Keep benchmark/grading summaries, drop the
+# bulky per-run dumps (tokenized data, encrypted vaults, generated drafts/finals).
+skills/pii-encryption-gateway-workspace/**/outputs/

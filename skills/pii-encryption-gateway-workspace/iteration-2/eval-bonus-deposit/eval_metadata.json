@@ -1,0 +1,17 @@
+{
+  "eval_id": 3,
+  "eval_name": "bonus-deposit",
+  "prompt": "bonus-deposit",
+  "assertions": [
+    {
+      "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+      "passed": true,
+      "evidence": "no raw PII found in draft"
+    },
+    {
+      "text": "final.txt contains a deposit message for every 개발팀 employee with real name + account",
+      "passed": true,
+      "evidence": "team=3, missing=[]"
+    }
+  ]
+}
