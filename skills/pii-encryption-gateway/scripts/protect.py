@@ -48,6 +48,9 @@ def _tokenize_spans(handler_key, text, vault_entries, type_counts):
     return text
 
 
+TEXT_EXTENSIONS = (".txt", ".md", ".markdown", ".text")
+
+
 def _load_records(path: str):
     if path.lower().endswith(".json"):
         with open(path, encoding="utf-8") as f:
@@ -55,6 +58,33 @@ def _load_records(path: str):
         return data if isinstance(data, list) else [data]
     with open(path, encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
+
+
+def _write_vault(vault_path, vault_entries):
+    vault = {"version": 1, "entry_count": len(vault_entries), "entries": vault_entries}
+    with open(vault_path, "w", encoding="utf-8") as f:
+        json.dump(vault, f, ensure_ascii=False, indent=2)
+
+
+def _protect_document(handler_key, in_path, out_path, vault_path):
+    """Document mode: run the value-shape recognizers over a whole .txt/.md
+    file, tokenizing PII spans in place while leaving prose intact. Output is
+    text (not JSON), restorable by reveal.py exactly like structured output."""
+    with open(in_path, encoding="utf-8") as f:
+        text = f.read()
+    vault_entries = {}
+    type_counts = {}
+    protected = _tokenize_spans(handler_key, text, vault_entries, type_counts)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(protected)
+    _write_vault(vault_path, vault_entries)
+
+    # Summary only — no raw values cross this boundary.
+    print(f"Protected document ({len(text)} chars) -> {out_path}")
+    print(f"Vault: {len(vault_entries)} unique values encrypted -> {vault_path}")
+    print("Tokenized spans: "
+          + (", ".join(f"{k}={v}" for k, v in sorted(type_counts.items())) or "none"))
 
 
 def _infer_columns(records):
@@ -81,6 +111,9 @@ def _infer_columns(records):
 
 
 def protect(handler_key, in_path, out_path, vault_path):
+    if in_path.lower().endswith(TEXT_EXTENSIONS):
+        return _protect_document(handler_key, in_path, out_path, vault_path)
+
     records = _load_records(in_path)
     vault_entries = {}  # token -> ciphertext(original value)
     type_counts = {}
@@ -111,9 +144,7 @@ def protect(handler_key, in_path, out_path, vault_path):
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(protected, f, ensure_ascii=False, indent=2)
 
-    vault = {"version": 1, "entry_count": len(vault_entries), "entries": vault_entries}
-    with open(vault_path, "w", encoding="utf-8") as f:
-        json.dump(vault, f, ensure_ascii=False, indent=2)
+    _write_vault(vault_path, vault_entries)
 
     # Summary only — no raw values cross this boundary.
     print(f"Protected {len(protected)} records -> {out_path}")
@@ -130,8 +161,10 @@ def protect(handler_key, in_path, out_path, vault_path):
 def main():
     p = argparse.ArgumentParser(description="Tokenize sensitive fields before LLM use.")
     p.add_argument("--key", required=True, help="Handler's secret key")
-    p.add_argument("--in", dest="in_path", required=True, help="Input CSV or JSON")
-    p.add_argument("--out", dest="out_path", required=True, help="Protected JSON output")
+    p.add_argument("--in", dest="in_path", required=True,
+                   help="Input CSV/JSON (structured) or TXT/MD (document mode)")
+    p.add_argument("--out", dest="out_path", required=True,
+                   help="Protected output (JSON for structured input, text for documents)")
     p.add_argument("--vault", dest="vault_path", required=True, help="Encrypted vault output")
     args = p.parse_args()
     protect(args.key, args.in_path, args.out_path, args.vault_path)
