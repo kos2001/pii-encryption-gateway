@@ -22,7 +22,30 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crypto_core  # noqa: E402
+import recognizers  # noqa: E402
 from pii_config import classify_field  # noqa: E402
+
+
+def _tokenize_spans(handler_key, text, vault_entries, type_counts):
+    """Replace any PII spans the value-level recognizers find inside `text`.
+
+    Used for columns the name-based classifier does NOT mark sensitive — a
+    free-text or mis-named column may still carry an RRN, phone, or email.
+    Returns the text with each detected span swapped for its token; non-PII
+    surrounding text is left intact. Replaces right-to-left so earlier offsets
+    stay valid.
+    """
+    spans = recognizers.analyze(text)
+    if not spans:
+        return text
+    for span in sorted(spans, key=lambda s: s.start, reverse=True):
+        original = text[span.start:span.end]
+        token = crypto_core.make_token(handler_key, span.entity_type, original)
+        if token not in vault_entries:
+            vault_entries[token] = crypto_core.encrypt(handler_key, original)
+        text = text[:span.start] + token + text[span.end:]
+        type_counts[span.entity_type] = type_counts.get(span.entity_type, 0) + 1
+    return text
 
 
 def _load_records(path: str):
@@ -45,7 +68,13 @@ def protect(handler_key, in_path, out_path, vault_path):
         for column, value in record.items():
             token_type = classify_field(column)
             if token_type is None or value in (None, ""):
-                new_record[column] = value
+                # Column name didn't mark this sensitive — still scan the value
+                # itself, so PII in a free-text or mis-named column is caught.
+                if isinstance(value, str) and value:
+                    new_record[column] = _tokenize_spans(
+                        handler_key, value, vault_entries, type_counts)
+                else:
+                    new_record[column] = value
                 continue
             token = crypto_core.make_token(handler_key, token_type, str(value))
             if token not in vault_entries:
