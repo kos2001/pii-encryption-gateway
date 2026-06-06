@@ -26,16 +26,19 @@ import recognizers  # noqa: E402
 from pii_config import classify_field  # noqa: E402
 
 
-def _tokenize_spans(handler_key, text, vault_entries, type_counts):
-    """Replace any PII spans the value-level recognizers find inside `text`.
+def _tokenize_spans(handler_key, text, vault_entries, type_counts, names=frozenset()):
+    """Replace PII spans found inside `text`: value-shape matches from the
+    recognizers, plus exact occurrences of any known `names` (deny-list).
 
     Used for columns the name-based classifier does NOT mark sensitive — a
-    free-text or mis-named column may still carry an RRN, phone, or email.
-    Returns the text with each detected span swapped for its token; non-PII
+    free-text or mis-named column may still carry an RRN, phone, or a roster
+    name. Returns the text with each detected span swapped for its token;
     surrounding text is left intact. Replaces right-to-left so earlier offsets
     stay valid.
     """
-    spans = recognizers.analyze(text)
+    spans = list(recognizers.analyze(text))
+    if names:
+        spans = recognizers._resolve_overlaps(spans + recognizers.find_names(text, names))
     if not spans:
         return text
     for span in sorted(spans, key=lambda s: s.start, reverse=True):
@@ -60,21 +63,34 @@ def _load_records(path: str):
         return list(csv.DictReader(f))
 
 
+def _load_names(path: str):
+    """Build a name deny-list from a roster: every value in a column the schema
+    classifies as NAME. Lets a handler pass --names-from <roster> so the known
+    employee names get sealed in free-text/document output too."""
+    names = set()
+    for record in _load_records(path):
+        for column, value in record.items():
+            if classify_field(column) == "NAME" and isinstance(value, str) and value.strip():
+                names.add(value.strip())
+    return names
+
+
 def _write_vault(vault_path, vault_entries):
     vault = {"version": 1, "entry_count": len(vault_entries), "entries": vault_entries}
     with open(vault_path, "w", encoding="utf-8") as f:
         json.dump(vault, f, ensure_ascii=False, indent=2)
 
 
-def _protect_document(handler_key, in_path, out_path, vault_path):
-    """Document mode: run the value-shape recognizers over a whole .txt/.md
-    file, tokenizing PII spans in place while leaving prose intact. Output is
-    text (not JSON), restorable by reveal.py exactly like structured output."""
+def _protect_document(handler_key, in_path, out_path, vault_path, names=frozenset()):
+    """Document mode: run the value-shape recognizers (plus any known-name
+    deny-list) over a whole .txt/.md file, tokenizing PII spans in place while
+    leaving prose intact. Output is text (not JSON), restorable by reveal.py
+    exactly like structured output."""
     with open(in_path, encoding="utf-8") as f:
         text = f.read()
     vault_entries = {}
     type_counts = {}
-    protected = _tokenize_spans(handler_key, text, vault_entries, type_counts)
+    protected = _tokenize_spans(handler_key, text, vault_entries, type_counts, names)
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(protected)
@@ -110,9 +126,9 @@ def _infer_columns(records):
     return inferred
 
 
-def protect(handler_key, in_path, out_path, vault_path):
+def protect(handler_key, in_path, out_path, vault_path, names=frozenset()):
     if in_path.lower().endswith(TEXT_EXTENSIONS):
-        return _protect_document(handler_key, in_path, out_path, vault_path)
+        return _protect_document(handler_key, in_path, out_path, vault_path, names)
 
     records = _load_records(in_path)
     vault_entries = {}  # token -> ciphertext(original value)
@@ -130,7 +146,7 @@ def protect(handler_key, in_path, out_path, vault_path):
                 # the value itself, so PII embedded in free text is caught.
                 if isinstance(value, str) and value:
                     new_record[column] = _tokenize_spans(
-                        handler_key, value, vault_entries, type_counts)
+                        handler_key, value, vault_entries, type_counts, names)
                 else:
                     new_record[column] = value
                 continue
@@ -166,8 +182,18 @@ def main():
     p.add_argument("--out", dest="out_path", required=True,
                    help="Protected output (JSON for structured input, text for documents)")
     p.add_argument("--vault", dest="vault_path", required=True, help="Encrypted vault output")
+    p.add_argument("--names-from", dest="names_from",
+                   help="Roster (CSV/JSON) whose NAME column seeds a name deny-list, "
+                        "so known names are sealed in free-text/document output too")
+    p.add_argument("--names", help="Comma-separated names to add to the deny-list")
     args = p.parse_args()
-    protect(args.key, args.in_path, args.out_path, args.vault_path)
+
+    names = set()
+    if args.names_from:
+        names |= _load_names(args.names_from)
+    if args.names:
+        names |= {n.strip() for n in args.names.split(",") if n.strip()}
+    protect(args.key, args.in_path, args.out_path, args.vault_path, names)
 
 
 if __name__ == "__main__":
