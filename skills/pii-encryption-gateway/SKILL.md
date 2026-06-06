@@ -1,17 +1,23 @@
 ---
 name: pii-encryption-gateway
 description: >-
-  Protect sensitive personal data — employee IDs (사번), salaries (연봉),
-  attendance (근태), resident registration numbers (주민등록번호), bank accounts,
-  phone numbers — so it is NEVER exposed to the language model while you still
-  complete the task. Use this
-  whenever a request involves an HR file, employee roster, payroll sheet, or any
-  dataset containing personal/financial fields and you need to draft messages,
-  build reports, classify, or transform that data. Each handler uses their own
-  secret key: sensitive values are tokenized before the model sees them and
-  decrypted back only for the authorized handler afterward. Trigger this even if
-  the user does not say "encrypt" — any task touching 연봉/근태/주민번호/계좌 in a
-  file should go through this gateway rather than reading the raw values.
+  Protect sensitive personal data so it is NEVER exposed to the language model
+  while you still complete the task. Covers resident registration numbers
+  (주민등록번호), salaries (연봉), employee IDs (사번), attendance (근태), bank
+  accounts, phone numbers, emails, card and business-registration numbers, and
+  IP addresses. Use this whenever a request involves any file, dataset, OR
+  free-text document — an HR roster, payroll sheet, patient list, log file,
+  incident memo, email draft, or meeting notes — that CONTAINS such
+  personal/financial identifiers and you need to draft messages, summarize,
+  build reports, classify, or transform it without leaking the raw values. Each
+  handler uses their own secret key: values are tokenized before the model sees
+  them and decrypted back only for the authorized handler afterward. Trigger
+  this even if the user does not say "encrypt" — any task touching real
+  주민번호/연봉/계좌/연락처 in a file or document should go through this gateway
+  rather than reading the raw values. Not for writing privacy policies,
+  explaining algorithms or checksums, generating regex/code, or
+  already-anonymized data — only when actual sensitive values are present and
+  must be withheld from the model.
 ---
 
 # PII Encryption Gateway
