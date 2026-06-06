@@ -14,6 +14,10 @@ real and synthetic dumps) are still tokenized. A passing checksum only *raises*
 the score. CARD is the deliberate exception — a 16-digit run that fails Luhn is
 rejected, because false positives there are both common and expensive.
 
+Detected value-shape entities: EMAIL, RRN (dashed and no-dash), PHONE (mobile/
+landline/+82, -/./space separators), BRN (사업자등록번호), IP (IPv4), CARD,
+ACCOUNT. Plus NAME via an exact-match deny-list (find_names).
+
 No third-party dependencies, matching crypto_core's portability constraint.
 """
 
@@ -66,12 +70,40 @@ def _account_validate(text: str):
     return 0.6 if sum(c.isdigit() for c in text) >= 11 else None
 
 
+def _brn_validate(text: str):
+    """Korean business registration number (사업자등록번호) checksum.
+
+    Checksum-gated like CARD: a 3-2-5 grouping that fails the check is rejected,
+    not kept — false positives there are common (ISBNs, other dashed codes) and
+    real BRNs reliably carry a valid check digit. Pass -> 0.9, else reject.
+    """
+    d = [int(c) for c in text if c.isdigit()]
+    if len(d) != 10:
+        return None
+    weights = [1, 3, 7, 1, 3, 7, 1, 3, 5]
+    total = sum(a * b for a, b in zip(d[:9], weights)) + (d[8] * 5) // 10
+    return 0.9 if (10 - (total % 10)) % 10 == d[9] else None
+
+
 # entity_type, compiled pattern, base score, optional validator(matched_text).
 # A validator returning None rejects the candidate; otherwise it sets the score.
+# Separators -, ., and space are all accepted in phone numbers; lookarounds
+# (not \b) bound them so a leading + and trailing digits are handled.
 _RECOGNIZERS = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), 0.9, None),
+    # RRN dashed (lenient — the dash is a strong signal) and no-dash (requires a
+    # valid YYMMDD so a random 13-digit run does not false-positive).
     ("RRN", re.compile(r"\b\d{6}-[1-8]\d{6}\b"), 0.6, _rrn_validate),
-    ("PHONE", re.compile(r"\b01[0-9]-?\d{3,4}-?\d{4}\b"), 0.85, None),
+    ("RRN", re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[1-8]\d{6}(?!\d)"),
+     0.6, _rrn_validate),
+    # Business registration number (3-2-5), checksum-gated.
+    ("BRN", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)"), 0.9, _brn_validate),
+    # Mobile (incl. +82) and landline phones; -, ., or space between groups.
+    ("PHONE", re.compile(r"(?<!\d)(?:\+82[-. ]?|0)1[0-9][-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.85, None),
+    ("PHONE", re.compile(r"(?<!\d)0(?:2|[3-7]\d)[-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.7, None),
+    # IPv4 — octets bounded 0-255 so 3-part versions / out-of-range quads miss.
+    ("IP", re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}"
+                      r"(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"), 0.85, None),
     ("CARD", re.compile(r"\b(?:\d{4}-){3}\d{4}\b|\b\d{16}\b"), 0.9, _card_validate),
     ("ACCOUNT", re.compile(rf"(?:{_BANKS})\s*\d{{2,6}}-\d{{2,6}}-\d{{2,6}}"), 0.9, None),
     ("ACCOUNT", re.compile(r"\b\d{2,6}-\d{2,6}-\d{2,6}\b"), 0.6, _account_validate),
@@ -93,11 +125,22 @@ def _resolve_overlaps(candidates):
     return chosen
 
 
+# Length-preserving fold of full-width ASCII variants to plain ASCII, so PII
+# typed in full-width forms (０１０＠… from spreadsheets/IMEs) is detected. The
+# fold is 1:1 per code point, so span offsets stay valid on the ORIGINAL text —
+# the original (full-width) value is what gets tokenized and restored.
+_FOLD = {0x3000: " ", 0xFF0B: "+", 0xFF0D: "-", 0xFF0E: ".", 0xFF20: "@", 0xFF1A: ":"}
+_FOLD.update({0xFF10 + i: str(i) for i in range(10)})
+_FOLD.update({0xFF21 + i: chr(ord("A") + i) for i in range(26)})
+_FOLD.update({0xFF41 + i: chr(ord("a") + i) for i in range(26)})
+
+
 def analyze(text: str, threshold: float = THRESHOLD):
     """Return non-overlapping value-shape PII Spans in `text` scoring >= threshold."""
+    scan = text.translate(_FOLD)  # detect on a folded copy; offsets unchanged
     candidates = []
     for entity_type, pattern, base, validate in _RECOGNIZERS:
-        for m in pattern.finditer(text):
+        for m in pattern.finditer(scan):
             score = base
             if validate is not None:
                 score = validate(m.group(0))
