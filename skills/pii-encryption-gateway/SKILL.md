@@ -69,6 +69,21 @@ python protect.py --key "<handler-key>" \
 script's output reports only counts, never values. **Read `protected.json`, not
 the raw file.**
 
+**Unstructured documents.** If the input is a `.txt`/`.md` file (a memo, an
+email draft, an incident report) rather than a roster, `protect.py` switches to
+document mode automatically: it runs the value-shape recognizers over the whole
+text, tokenizes the PII spans in place, and writes a *text* file with the prose
+intact. Point `--out` at a text file and proceed the same way.
+
+```bash
+python protect.py --key "<handler-key>" \
+    --in memo.md --out protected.md --vault vault.json
+```
+
+Note this is recognizer-only: it seals patterned PII (RRN, phone, email,
+account, card), not names in prose, which have no pattern. Don't claim a
+document is name-safe — say plainly that names are not detected.
+
 ### 2. Do the task on tokens
 
 Read `protected.json` and complete the request. Refer to people and values by
