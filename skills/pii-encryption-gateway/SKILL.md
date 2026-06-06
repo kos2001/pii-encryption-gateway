@@ -1,229 +1,173 @@
 ---
 name: pii-encryption-gateway
 description: >-
-  Protect sensitive personal data so it is NEVER exposed to the language model
-  while you still complete the task. Covers resident registration numbers
-  (주민등록번호), salaries (연봉), employee IDs (사번), attendance (근태), bank
-  accounts, phone numbers, emails, card and business-registration numbers, and
-  IP addresses. Use this whenever a request involves any file, dataset, OR
-  free-text document — an HR roster, payroll sheet, patient list, log file,
-  incident memo, email draft, or meeting notes — that CONTAINS such
-  personal/financial identifiers and you need to draft messages, summarize,
-  build reports, classify, or transform it without leaking the raw values. Each
-  handler uses their own secret key: values are tokenized before the model sees
-  them and decrypted back only for the authorized handler afterward. Trigger
-  this even if the user does not say "encrypt" — any task touching real
-  주민번호/연봉/계좌/연락처 in a file or document should go through this gateway
-  rather than reading the raw values. Not for writing privacy policies,
-  explaining algorithms or checksums, generating regex/code, or
-  already-anonymized data — only when actual sensitive values are present and
-  must be withheld from the model.
+  De-identify sensitive personal data so the language model never sees raw
+  identifiers, while you still complete the task — including computing
+  statistics. By default, direct identifiers (names/이름, 주민등록번호, 사번,
+  bank accounts, phones, emails, cards, business-registration numbers, IPs) are
+  replaced with stable tokens, and numeric attributes (연봉, 근태) are kept raw
+  so you can still compute averages, sums, counts, and distributions. Use
+  whenever a request involves an HR roster, payroll sheet, patient list, log
+  file, incident memo, email draft, or any file/document containing personal
+  identifiers and you need to analyze, aggregate, draft messages, summarize,
+  build reports, classify, or transform it without leaking identities. A
+  stronger keyed mode additionally encrypts every value (identifiers AND
+  numbers) into a vault for per-person, key-gated, at-rest protection. Trigger
+  this even if the user does not say "encrypt" or "de-identify" — any task
+  touching real 이름/주민번호/연봉/계좌/연락처 in a file or document should go
+  through this rather than reading the raw values. Not for writing privacy
+  policies, explaining algorithms or checksums, generating regex/code, or
+  already-anonymized data.
 ---
 
-# PII Encryption Gateway
+# PII De-identification Gateway
 
-You are handling data that contains sensitive personal information. The whole
-point of this skill is that **you must complete the task without ever reading
-the real sensitive values into your context.** If a salary or a resident
-registration number appears in your reasoning or output, the protection has
-failed — even if the final file is correct.
+You are handling data that contains sensitive personal information. The point of
+this skill is that **you complete the task without ever reading raw identifiers
+into your context.** If a name, a resident registration number, or an account
+number appears in your reasoning or output, the protection has failed — even if
+the final file is correct.
 
-The mechanism that makes this possible: a bundled tool replaces each sensitive
-value with a stable token like `[[SALARY:3f9a2c1d]]` and encrypts the originals
-into a vault. You work entirely with tokens. A second tool decrypts the tokens
-back into real values at the very end, for the authorized handler only.
+The **default approach is keyless de-identification**: a bundled tool replaces
+each direct identifier with a stable token like `[[NAME:3f9a2c1d]]` and keeps
+the originals in a plaintext map for later restoration. Crucially, **numeric
+attributes (salary, attendance) are left raw**, so you can still compute
+averages, sums, and distributions directly — the model sees the numbers but not
+*whose* they are. A second tool restores the identifiers at the very end.
 
-Sensitive values are caught three ways, so PII is protected no matter where it
-sits:
-
-1. **By column name** — the schema in `pii_config.py`.
-2. **By column shape** — `protect.py` value-samples each unlisted column; if its
-   cells *are* a single PII entity (a renamed phone or RRN column), the whole
-   column is tokenized, sealing even an odd off-format cell the per-value pass
-   would miss. Auto-detected columns are listed in the protect summary so you
-   can sanity-check them (names only, never values).
-3. **By value shape** — the recognizers in `recognizers.py` match RRNs (dashed
-   or 13-digit), phones (mobile/landline/+82, with -, ., or space separators),
-   emails, accounts, cards, business registration numbers, and IPv4 addresses
-   *mid-sentence* in free-text columns and tokenize just those spans.
-
-A value-shaped match is tokenized even when its checksum is invalid; protection
-is fail-safe. (Card numbers are the one exception — a 16-digit run that fails
-Luhn is treated as a false positive and left alone.)
+For tasks that also need **at-rest encryption and per-person, key-gated access
+control**, there is a stronger **keyed gateway** (see the bottom section) that
+encrypts *every* value — including the numbers — into a vault. It is more
+protective but seals the numbers, so it cannot compute statistics.
 
 ## The one rule that matters
 
-**Never open the raw input file.** Do not `cat`, `Read`, `head`, `grep`, or
-otherwise inspect the original CSV/JSON. The moment you do, real values enter
-your context and the gateway is pointless. Treat the raw file as something you
-can name and pass to scripts, but never look inside.
+**Never open the raw input file, and never open the map/vault.** Do not `cat`,
+`Read`, `head`, or `grep` the original CSV/JSON/document, nor `map.json` /
+`vault.json`. The moment you do, real identifiers enter your context and the
+gateway is pointless. Treat those files as things you can name and pass to
+scripts, but never look inside. Work only from the de-identified output.
 
-## Workflow
+## How PII is detected (shared by both modes)
 
-Work from the skill's `scripts/` directory (paths below are relative to it).
+Identifiers are caught three ways, so they are protected no matter where they sit:
 
-### 1. Protect
+1. **By column name** — the schema in `pii_config.py`.
+2. **By column shape** — value-sampling classifies a renamed column (e.g. a
+   phone column not named "전화") from its values, sealing even an odd off-format
+   cell the per-value pass would miss.
+3. **By value shape** — the recognizers in `recognizers.py` match RRNs (dashed
+   or 13-digit), phones (mobile/landline/+82, with -, ., or space separators),
+   emails, accounts, cards, business registration numbers, and IPv4 addresses
+   *mid-sentence* in free text (full-width digits included). A format match is
+   sealed even if its checksum is invalid (fail-safe); CARD/BRN are the
+   exception — a checksum failure is treated as a false positive.
 
-Pick the handler's key (the user provides it, or use the one already in the
-task). Then tokenize:
+**Names in prose** have no value shape. When you know them — in an HR task they
+sit in the roster — pass them as a deny-list (`--names-from roster.csv` or
+`--names "최민준,신다은"`) so they are sealed by exact match (zero false
+positives). Only the supplied names are sealed; a third party not in the roster
+is not detected — say so plainly rather than claiming a document is name-safe.
+
+## Default workflow: de-identify
+
+Work from the skill's `scripts/` directory.
+
+### 1. De-identify
 
 ```bash
-python protect.py --key "<handler-key>" \
-    --in <raw-file> --out protected.json --vault vault.json
+python deidentify.py --in <raw-file> --out deidentified.json --map map.json \
+    [--names-from <roster.csv>]
 ```
 
-`protected.json` is safe to read — every sensitive field is now a token. The
-script's output reports only counts, never values. **Read `protected.json`, not
-the raw file.**
+Direct identifiers (이름·주민번호·사번·계좌·전화·이메일, plus card/BRN/IP in free
+text) become tokens; numeric and non-sensitive columns (연봉·근태·부서·직급) stay
+**raw**. `.txt`/`.md` documents are supported too — only identifier spans are
+tokenized, prose stays intact. The summary reports counts only, never values.
+**Read `deidentified.json`, not the raw file.**
 
-**Unstructured documents.** If the input is a `.txt`/`.md` file (a memo, an
-email draft, an incident report) rather than a roster, `protect.py` switches to
-document mode automatically: it runs the value-shape recognizers over the whole
-text, tokenizes the PII spans in place, and writes a *text* file with the prose
-intact. Point `--out` at a text file and proceed the same way.
+### 2. Work on the de-identified file (analysis included)
+
+Read `deidentified.json` and complete the request:
+
+- **Statistics / aggregation** — because numbers stayed raw, compute averages,
+  sums, counts, group-bys directly (e.g. "부서별 평균 연봉": group by the
+  clear-text 부서, average the raw 연봉). Identities never enter the result.
+- **Per-record templating** — refer to people by their tokens (`[[NAME:...]]`).
+  Tokens are deterministic, so the same person always has the same token —
+  grouping, matching, and templating still work.
+- Non-sensitive columns (부서, 직급, 입사일) are clear text; use them freely for
+  structure and grouping.
+
+Write your output to a file. If it is a pure aggregate (no identifier tokens),
+it contains no PII and is ready as-is.
+
+**Self-check.** Confirm you never read the raw file or the map, and that every
+identifier slot holds a `[[TYPE:hash]]` token, not a real name/number. A raw
+identifier appearing means you read something you shouldn't have — start over.
+
+### 3. Re-identify (only if your output contains identifier tokens)
 
 ```bash
-python protect.py --key "<handler-key>" \
-    --in memo.md --out protected.md --vault vault.json
+python reidentify.py --map map.json --in <your-output> --out final.json
 ```
 
-**Names in prose.** Recognizers seal patterned PII (RRN, phone, email, account,
-card, business registration number) but not names, which have no value shape. When you know the names — in an
-HR task they sit in the roster — pass them as a deny-list so they are sealed by
-exact match too (zero false positives, still no dependency):
+Restores identifiers from the plaintext map. A pure statistics report has no
+tokens, so skip this step and deliver it directly.
+
+## Stronger option: keyed gateway (per-person + at-rest encryption)
+
+Use this **instead** of de-identify when the task needs the originals encrypted
+at rest and restorable only by a key holder — e.g. drafting per-person notices
+from data that must stay sealed on disk. It tokenizes **every** sensitive value
+(identifiers *and* numbers) and encrypts the originals into a key-gated vault;
+a wrong key fails rather than leaks. Because the numbers are sealed too, it
+**cannot compute statistics** — do aggregates with a script over the raw file
+and feed only the result back in.
 
 ```bash
-python protect.py --key "<handler-key>" --in memo.md --out protected.md \
-    --vault vault.json --names-from employees.csv   # or --names "최민준,신다은"
-```
-
-`--names-from` reads the roster's name column; `--names` takes an explicit list.
-This catches *known* names only. A third party not in the roster still won't be
-detected — don't claim a document is name-safe for arbitrary names; say plainly
-that only the supplied names are sealed.
-
-### 2. Do the task on tokens
-
-Read `protected.json` and complete the request. Refer to people and values by
-their tokens. Because tokens are deterministic, the same person or value always
-has the same token, so you can still group, match, and template correctly:
-
-- "Draft a salary notice for 사번 E0023" → the employee ID is itself sensitive
-  and tokenized in `protected.json`, so you cannot grep "E0023" there. Instead
-  translate the reference the user gave you into its token and match that:
-
-  ```bash
-  python tokenize_value.py --key "<handler-key>" --type EMPNO --value E0023
-  # -> [[EMPNO:1a2b3c4d]]   ← find this token in protected.json
-  ```
-
-  Then write the email with `[[NAME:...]]` and `[[SALARY:...]]` in place; the
-  structure is yours, the values stay sealed. The same trick works for any known
-  reference (a name, an account) — tokenize it, then match.
-- "Per-employee attendance notice" → templatize with the `[[LATE:...]]`,
-  `[[ABSENCE:...]]`, `[[LEAVE:...]]` tokens for each row.
-- Non-sensitive columns (부서, 직급, 입사일) are left in clear text, so
-  department- or title-level structure and grouping work normally. Employee IDs
-  (사번) are sensitive and tokenized — group by them via their tokens, and use
-  the lookup trick above when the user references one by its real value.
-
-Write your output (the draft, report, or transformed file) to a file, keeping
-the tokens intact. Do not invent tokens — only reuse ones that appear in
-`protected.json`.
-
-**Self-check before revealing.** Glance at your draft and confirm two things:
-you never ran `cat`/`Read`/`head`/`grep` on the raw input, and every place that
-should hold a sensitive value holds a `[[TYPE:hash]]` token rather than a real
-name or number. If a real value somehow appears, you read something you
-shouldn't have — start over from step 1.
-
-### 3. Reveal
-
-If your output contains no tokens at all — for example a pure aggregate report
-built only from non-sensitive columns — there is nothing to restore, so skip
-this step and deliver the file as-is. Otherwise:
-
-Restore real values for the authorized handler:
-
-```bash
+python protect.py --key "<handler-key>" --in <raw-file> \
+    --out protected.json --vault vault.json [--names-from roster.csv]
+# ... work on protected.json (tokens only) ...
 python reveal.py --key "<handler-key>" --vault vault.json \
-    --in <your-output-file> --out final.txt
+    --in <your-output> --out final.txt          # wrong key fails, never leaks
 ```
 
-`final.txt` is the deliverable with real names, salaries, and so on filled in. A
-wrong key makes `reveal.py` fail rather than leak — that is the access control.
-
-## What this gateway does and does not do
-
-It guarantees the model never sees raw sensitive values, and that output is
-fully reversible for the right handler. It is well suited to drafting
-communications, per-record templating, routing, reformatting, and structural
-reports.
-
-It does **not** let the model do arithmetic on the protected values — you cannot
-compute an average salary from `[[SALARY:...]]` tokens, because that is exactly
-the information being withheld. If a task needs aggregate statistics over
-sensitive numbers, either compute them with a script over the raw file and feed
-only the aggregate back in, **or use the keyless de-identification mode below**,
-which leaves numbers raw on purpose. Say so plainly rather than pretending to
-analyze tokens.
-
-## Two modes: keyed gateway vs keyless de-identification
-
-There are two tools with different trade-offs — pick by the goal.
-
-**Keyed gateway** (`protect.py` / `reveal.py`, above) — the strong model. Every
-sensitive value (identifiers *and* numbers) is tokenized and the originals are
-**encrypted into a vault**; only the handler key restores them, and a wrong key
-fails instead of leaking. Use when at-rest protection and key-gated access
-control matter. Numbers are sealed, so aggregates need a script over the raw
+`tokenize_value.py --key … --type EMPNO --value E0023` gives the token for a
+known reference, to locate a record in `protected.json` without reading the raw
 file.
 
-**Keyless de-identification** (`deidentify.py` / `reidentify.py`) — the light
-model. It tokenizes **only direct identifiers** (name, RRN, account, phone,
-email, employee id, and value-shape matches like card/BRN/IP) and leaves
-everything else — **including numeric attributes like salary and attendance —
-raw**. So the model never sees raw identifiers, **yet can compute averages and
-sums over the numbers directly**. Reversal is a **plaintext map** (token →
-original), not an encrypted vault — there is no key.
+## Choosing between them
 
-```bash
-python deidentify.py --in data.csv --out deidentified.json --map map.json \
-    [--names-from roster.csv]
-# → 이름/주민/계좌 = tokens; 연봉/근태 = raw (averageable); map.json is plaintext
-python reidentify.py --map map.json --in <output> --out final.json
-```
+| Goal | Use |
+|------|-----|
+| Statistics / aggregation, reports, analysis | **de-identify** (numbers raw) |
+| Hide identities but keep numbers usable | **de-identify** |
+| Per-person output + at-rest encryption + key access control | **keyed gateway** |
+| Even the de-linked numbers must not reach the model | script-computed aggregates only |
 
-Honest trade-off: the keyless mode's only guarantee is "raw identifiers never
-enter the model's working copy." There is **no at-rest encryption and no key**,
-so the `map.json` is as sensitive as the originals — guard it exactly like the
-raw file (the protection is the same *never open the map* discipline, minus
-encryption). It also exposes the numeric values themselves (de-linked from
-names), which is the point — only choose it when that is acceptable.
+## Honest limits
 
-One more honest limit: tokens are deterministic, so equal values produce equal
-tokens. That is what makes grouping work, but it means an observer of the
-protected data can tell *which records share a value* and how frequently each
-recurs — never the value itself without the key, but the equality pattern is
-visible. For a low-cardinality field (e.g. attendance counts 0–15) that pattern
-can be informative. If even equality must be hidden for a field, it should not
-be tokenized deterministically (it would need randomized per-cell tokens, which
-costs you the ability to group on it).
+- **De-identify exposes the numbers themselves** (de-linked from names). That is
+  what makes statistics possible; if even de-linked salaries must not reach the
+  model, compute aggregates with a script and pass only the result.
+- **The map is plaintext** (de-identify mode has no key/encryption) — `map.json`
+  is as sensitive as the originals; guard it like the raw file. The keyed
+  gateway's vault is encrypted instead.
+- **Deterministic tokens**: equal values produce equal tokens, which enables
+  grouping but reveals *which records share a value* (equality/frequency) — never
+  the value itself. For a low-cardinality field this pattern can be informative.
+- **Keyed gateway cannot aggregate** sealed numbers (by design).
 
 ## Files
 
-- `scripts/protect.py` — tokenize sensitive fields, build the vault
-- `scripts/reveal.py` — restore real values from the vault (key-gated)
-- `scripts/tokenize_value.py` — token for a known value, to locate a record by
-  a sensitive reference (e.g. a 사번) without reading the raw file
-- `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, tokenization
-- `scripts/deidentify.py` — keyless de-identification: identifiers→tokens,
-  numbers kept raw (averageable), plaintext map (no key)
-- `scripts/reidentify.py` — restore identifiers from the keyless plaintext map
+- `scripts/deidentify.py` — **default**: identifiers→tokens, numbers kept raw
+  (analyzable/averageable), plaintext map (no key); CSV/JSON and .txt/.md
+- `scripts/reidentify.py` — restore identifiers from the plaintext map
 - `scripts/deid_core.py` — keyless deterministic token (no key, no encryption)
-- `scripts/pii_config.py` — which columns are sensitive + which are direct
-  identifiers (edit to adapt schema)
-- `scripts/recognizers.py` — value-shape PII detection (RRN/phone/email/account/
-  card/business-reg-number) with checksum validation, column inference for
-  renamed columns, and deny-list name matching — catches PII in free-text,
-  mis-named columns, and documents
+- `scripts/protect.py` — keyed gateway: tokenize every value, build encrypted vault
+- `scripts/reveal.py` — restore from the vault (key-gated)
+- `scripts/tokenize_value.py` — token for a known value (keyed mode record lookup)
+- `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, keyed tokenization
+- `scripts/pii_config.py` — sensitive fields + which are direct identifiers
+- `scripts/recognizers.py` — value-shape detection, column inference, deny-list names
