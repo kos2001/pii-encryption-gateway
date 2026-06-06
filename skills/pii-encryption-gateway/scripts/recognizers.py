@@ -125,11 +125,22 @@ def _resolve_overlaps(candidates):
     return chosen
 
 
+# Length-preserving fold of full-width ASCII variants to plain ASCII, so PII
+# typed in full-width forms (０１０＠… from spreadsheets/IMEs) is detected. The
+# fold is 1:1 per code point, so span offsets stay valid on the ORIGINAL text —
+# the original (full-width) value is what gets tokenized and restored.
+_FOLD = {0x3000: " ", 0xFF0B: "+", 0xFF0D: "-", 0xFF0E: ".", 0xFF20: "@", 0xFF1A: ":"}
+_FOLD.update({0xFF10 + i: str(i) for i in range(10)})
+_FOLD.update({0xFF21 + i: chr(ord("A") + i) for i in range(26)})
+_FOLD.update({0xFF41 + i: chr(ord("a") + i) for i in range(26)})
+
+
 def analyze(text: str, threshold: float = THRESHOLD):
     """Return non-overlapping value-shape PII Spans in `text` scoring >= threshold."""
+    scan = text.translate(_FOLD)  # detect on a folded copy; offsets unchanged
     candidates = []
     for entity_type, pattern, base, validate in _RECOGNIZERS:
-        for m in pattern.finditer(text):
+        for m in pattern.finditer(scan):
             score = base
             if validate is not None:
                 score = validate(m.group(0))
