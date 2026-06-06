@@ -66,12 +66,37 @@ def _account_validate(text: str):
     return 0.6 if sum(c.isdigit() for c in text) >= 11 else None
 
 
+def _brn_validate(text: str):
+    """Korean business registration number (사업자등록번호) checksum.
+
+    Checksum-gated like CARD: a 3-2-5 grouping that fails the check is rejected,
+    not kept — false positives there are common (ISBNs, other dashed codes) and
+    real BRNs reliably carry a valid check digit. Pass -> 0.9, else reject.
+    """
+    d = [int(c) for c in text if c.isdigit()]
+    if len(d) != 10:
+        return None
+    weights = [1, 3, 7, 1, 3, 7, 1, 3, 5]
+    total = sum(a * b for a, b in zip(d[:9], weights)) + (d[8] * 5) // 10
+    return 0.9 if (10 - (total % 10)) % 10 == d[9] else None
+
+
 # entity_type, compiled pattern, base score, optional validator(matched_text).
 # A validator returning None rejects the candidate; otherwise it sets the score.
+# Separators -, ., and space are all accepted in phone numbers; lookarounds
+# (not \b) bound them so a leading + and trailing digits are handled.
 _RECOGNIZERS = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), 0.9, None),
+    # RRN dashed (lenient — the dash is a strong signal) and no-dash (requires a
+    # valid YYMMDD so a random 13-digit run does not false-positive).
     ("RRN", re.compile(r"\b\d{6}-[1-8]\d{6}\b"), 0.6, _rrn_validate),
-    ("PHONE", re.compile(r"\b01[0-9]-?\d{3,4}-?\d{4}\b"), 0.85, None),
+    ("RRN", re.compile(r"(?<!\d)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[1-8]\d{6}(?!\d)"),
+     0.6, _rrn_validate),
+    # Business registration number (3-2-5), checksum-gated.
+    ("BRN", re.compile(r"(?<!\d)\d{3}-\d{2}-\d{5}(?!\d)"), 0.9, _brn_validate),
+    # Mobile (incl. +82) and landline phones; -, ., or space between groups.
+    ("PHONE", re.compile(r"(?<!\d)(?:\+82[-. ]?|0)1[0-9][-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.85, None),
+    ("PHONE", re.compile(r"(?<!\d)0(?:2|[3-7]\d)[-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.7, None),
     ("CARD", re.compile(r"\b(?:\d{4}-){3}\d{4}\b|\b\d{16}\b"), 0.9, _card_validate),
     ("ACCOUNT", re.compile(rf"(?:{_BANKS})\s*\d{{2,6}}-\d{{2,6}}-\d{{2,6}}"), 0.9, None),
     ("ACCOUNT", re.compile(r"\b\d{2,6}-\d{2,6}-\d{2,6}\b"), 0.6, _account_validate),
