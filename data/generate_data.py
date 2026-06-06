@@ -63,11 +63,24 @@ def generate(count, seed=42):
     return rows
 
 
+def add_freetext_remarks(rows):
+    """Add a free-text "비고" column whose prose embeds the row's OWN phone and
+    RRN. The column name is not in pii_config's aliases, so column-name
+    classification can't catch it — only the value-shape recognizer pass can.
+    Used by the freetext-column-leak eval. Returns rows (mutated in place)."""
+    for r in rows:
+        r["비고"] = (f"개인 메모: 비상시 {r['전화번호']} 로 연락 가능, "
+                    f"신원확인용 주민번호 {r['주민등록번호']} 기재됨")
+    return rows
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--count", type=int, default=40)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--out-dir", default=os.path.dirname(os.path.abspath(__file__)))
+    p.add_argument("--freetext", action="store_true",
+                   help="Also write employees_freetext.csv with a free-text 비고 column")
     args = p.parse_args()
 
     rows = generate(args.count, args.seed)
@@ -82,6 +95,15 @@ def main():
         json.dump(rows, f, ensure_ascii=False, indent=2)
 
     print(f"Generated {len(rows)} synthetic employees -> {csv_path}, {json_path}")
+
+    if args.freetext:
+        ft_rows = add_freetext_remarks(generate(args.count, args.seed))
+        ft_path = os.path.join(args.out_dir, "employees_freetext.csv")
+        with open(ft_path, "w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(ft_rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(ft_rows)
+        print(f"Generated freetext variant -> {ft_path}")
 
 
 if __name__ == "__main__":

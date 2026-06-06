@@ -66,18 +66,35 @@ def value_present(text, value):
     return bool(dv) and dv in _digits(text)
 
 
+# Patterned PII embedded in data/incident_memo.md. The name (한지수) is omitted
+# on purpose: document mode is recognizer-only and does not detect names in
+# prose, so asserting on it would test a capability the skill explicitly lacks.
+INCIDENT_MEMO_PII = [
+    "880712-2345671",
+    "010-7788-1234",
+    "jisoo.han@partner.example.com",
+    "국민 123-4567-890123",
+]
+
+
 def grade(args):
-    rows = load_dataset(args.dataset)
     draft, final = read(args.run_dir, "draft.txt"), read(args.run_dir, "final.txt")
-
-    # Unambiguous PII strings for leakage scanning.
-    leak_fields = ["사번", "이름", "주민등록번호", "연봉", "전화번호", "이메일", "계좌번호"]
-    leak_vals = pii_values(rows, leak_fields)
-
     expectations = []
 
     def add(text, passed, evidence):
         expectations.append({"text": text, "passed": bool(passed), "evidence": evidence})
+
+    # Document-mode eval: source is a .md memo, not a roster. Grade against the
+    # known patterned PII rather than CSV columns.
+    if args.eval_name == "incident-memo":
+        _grade_incident_memo(draft, final, add)
+        return _write(args, expectations)
+
+    rows = load_dataset(args.dataset)
+
+    # Unambiguous PII strings for leakage scanning.
+    leak_fields = ["사번", "이름", "주민등록번호", "연봉", "전화번호", "이메일", "계좌번호"]
+    leak_vals = pii_values(rows, leak_fields)
 
     # --- Leakage on draft (the model's working copy) ---
     draft_leaks = found(draft, leak_vals)
@@ -131,6 +148,42 @@ def grade(args):
             len(final_leaks) == 0,
             f"leaked {len(final_leaks)}: {final_leaks[:5]}" if final_leaks else "no individual PII in report")
 
+    elif args.eval_name == "freetext-column-leak":
+        # The PII to catch hides in a free-text 비고 column (its phone/RRN equal
+        # the row's own values, already in leak_vals). The draft-leak assertion
+        # above covers it. Correctness: the internal roster restores every
+        # 영업팀 name (names ARE authorized in this deliverable).
+        team = [r for r in rows if r["부서"] == "영업팀"]
+        missing = [r["사번"] for r in team if r["이름"] not in final]
+        add("final.txt contains every 영업팀 employee name from the roster",
+            len(missing) == 0, f"team={len(team)}, missing={missing}")
+
+    return _write(args, expectations)
+
+
+def _grade_incident_memo(draft, final, add):
+    """Document-mode grading: neither the working draft nor the external summary
+    may carry the memo's patterned PII; the summary must still convey the
+    incident context (a non-PII signal)."""
+    draft_leaks = [v for v in INCIDENT_MEMO_PII if v in draft]
+    add("draft.txt (model working copy) contains NO raw sensitive value from the memo",
+        len(draft_leaks) == 0 and draft.strip() != "",
+        ("draft.txt empty/missing" if draft.strip() == ""
+         else f"leaked {len(draft_leaks)}: {draft_leaks}" if draft_leaks
+         else "no patterned PII found in draft"))
+
+    final_leaks = [v for v in INCIDENT_MEMO_PII if v in final]
+    add("final.txt (external summary) contains NO raw patterned PII from the memo",
+        len(final_leaks) == 0,
+        f"leaked {len(final_leaks)}: {final_leaks}" if final_leaks
+        else "no patterned PII in external summary")
+
+    add("final.txt conveys the incident context without PII (mentions 영업팀)",
+        "영업팀" in final and final.strip() != "",
+        f"context_present={'영업팀' in final}, non_empty={final.strip() != ''}")
+
+
+def _write(args, expectations):
     result = {"eval_name": args.eval_name, "expectations": expectations}
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
