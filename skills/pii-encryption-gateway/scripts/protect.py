@@ -57,19 +57,44 @@ def _load_records(path: str):
         return list(csv.DictReader(f))
 
 
+def _infer_columns(records):
+    """Value-sample each column the name-classifier missed and, where the
+    column's values ARE a single PII entity, return column -> inferred type.
+
+    Classifying at the column level (not just per cell) lets us seal an odd
+    malformed cell that the per-value recognizers can't match on its own.
+    """
+    if not records:
+        return {}
+    columns = {}
+    for record in records:
+        for column, value in record.items():
+            columns.setdefault(column, []).append(value)
+    inferred = {}
+    for column, values in columns.items():
+        if classify_field(column) is not None:
+            continue
+        result = recognizers.infer_column_type(values)
+        if result is not None:
+            inferred[column] = result[0]
+    return inferred
+
+
 def protect(handler_key, in_path, out_path, vault_path):
     records = _load_records(in_path)
     vault_entries = {}  # token -> ciphertext(original value)
     type_counts = {}
     protected = []
 
+    inferred_columns = _infer_columns(records)
+
     for record in records:
         new_record = {}
         for column, value in record.items():
-            token_type = classify_field(column)
+            token_type = classify_field(column) or inferred_columns.get(column)
             if token_type is None or value in (None, ""):
-                # Column name didn't mark this sensitive — still scan the value
-                # itself, so PII in a free-text or mis-named column is caught.
+                # Column neither name-classified nor value-inferred — still scan
+                # the value itself, so PII embedded in free text is caught.
                 if isinstance(value, str) and value:
                     new_record[column] = _tokenize_spans(
                         handler_key, value, vault_entries, type_counts)
@@ -94,6 +119,12 @@ def protect(handler_key, in_path, out_path, vault_path):
     print(f"Protected {len(protected)} records -> {out_path}")
     print(f"Vault: {len(vault_entries)} unique values encrypted -> {vault_path}")
     print("Tokenized fields: " + ", ".join(f"{k}={v}" for k, v in sorted(type_counts.items())))
+    if inferred_columns:
+        # Surface columns protected by value shape rather than name, so the
+        # handler can sanity-check the auto-detection (column names only — never
+        # values).
+        print("Auto-detected by value shape: "
+              + ", ".join(f"{c}={t}" for c, t in sorted(inferred_columns.items())))
 
 
 def main():
