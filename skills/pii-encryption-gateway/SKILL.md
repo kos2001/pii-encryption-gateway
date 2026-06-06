@@ -163,9 +163,43 @@ reports.
 It does **not** let the model do arithmetic on the protected values — you cannot
 compute an average salary from `[[SALARY:...]]` tokens, because that is exactly
 the information being withheld. If a task needs aggregate statistics over
-sensitive numbers, compute them with a script over the raw file (so the numbers
-never enter the model) and feed only the aggregate back in. Say so plainly
-rather than pretending to analyze tokens.
+sensitive numbers, either compute them with a script over the raw file and feed
+only the aggregate back in, **or use the keyless de-identification mode below**,
+which leaves numbers raw on purpose. Say so plainly rather than pretending to
+analyze tokens.
+
+## Two modes: keyed gateway vs keyless de-identification
+
+There are two tools with different trade-offs — pick by the goal.
+
+**Keyed gateway** (`protect.py` / `reveal.py`, above) — the strong model. Every
+sensitive value (identifiers *and* numbers) is tokenized and the originals are
+**encrypted into a vault**; only the handler key restores them, and a wrong key
+fails instead of leaking. Use when at-rest protection and key-gated access
+control matter. Numbers are sealed, so aggregates need a script over the raw
+file.
+
+**Keyless de-identification** (`deidentify.py` / `reidentify.py`) — the light
+model. It tokenizes **only direct identifiers** (name, RRN, account, phone,
+email, employee id, and value-shape matches like card/BRN/IP) and leaves
+everything else — **including numeric attributes like salary and attendance —
+raw**. So the model never sees raw identifiers, **yet can compute averages and
+sums over the numbers directly**. Reversal is a **plaintext map** (token →
+original), not an encrypted vault — there is no key.
+
+```bash
+python deidentify.py --in data.csv --out deidentified.json --map map.json \
+    [--names-from roster.csv]
+# → 이름/주민/계좌 = tokens; 연봉/근태 = raw (averageable); map.json is plaintext
+python reidentify.py --map map.json --in <output> --out final.json
+```
+
+Honest trade-off: the keyless mode's only guarantee is "raw identifiers never
+enter the model's working copy." There is **no at-rest encryption and no key**,
+so the `map.json` is as sensitive as the originals — guard it exactly like the
+raw file (the protection is the same *never open the map* discipline, minus
+encryption). It also exposes the numeric values themselves (de-linked from
+names), which is the point — only choose it when that is acceptable.
 
 One more honest limit: tokens are deterministic, so equal values produce equal
 tokens. That is what makes grouping work, but it means an observer of the
@@ -183,7 +217,12 @@ costs you the ability to group on it).
 - `scripts/tokenize_value.py` — token for a known value, to locate a record by
   a sensitive reference (e.g. a 사번) without reading the raw file
 - `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, tokenization
-- `scripts/pii_config.py` — which columns are sensitive (edit to adapt schema)
+- `scripts/deidentify.py` — keyless de-identification: identifiers→tokens,
+  numbers kept raw (averageable), plaintext map (no key)
+- `scripts/reidentify.py` — restore identifiers from the keyless plaintext map
+- `scripts/deid_core.py` — keyless deterministic token (no key, no encryption)
+- `scripts/pii_config.py` — which columns are sensitive + which are direct
+  identifiers (edit to adapt schema)
 - `scripts/recognizers.py` — value-shape PII detection (RRN/phone/email/account/
   card/business-reg-number) with checksum validation, column inference for
   renamed columns, and deny-list name matching — catches PII in free-text,
