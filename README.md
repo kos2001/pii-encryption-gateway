@@ -9,11 +9,14 @@
 skills/pii-encryption-gateway/   # 스킬 본체
   SKILL.md                       #   동작 규율 (원본 파일을 읽지 않는다)
   scripts/
-    crypto_core.py               #   표준 라이브러리만으로 KDF + AEAD + 결정론적 토큰
-    protect.py                   #   민감 값 → 토큰 (CSV/JSON 구조 + .txt/.md 문서 모드)
-    reveal.py                    #   담당자 키로 토큰 → 원본 복원 (틀린 키는 실패)
-    tokenize_value.py            #   알고 있는 값(예: 사번)의 토큰 계산 — 원본 안 읽고 레코드 조회
-    pii_config.py                #   컬럼명 기준 민감 필드 정의
+    deidentify.py                #   [기본] 식별자→토큰, 숫자는 원본 유지(집계 가능), 평문 매핑(키 없음)
+    reidentify.py                #   평문 매핑으로 식별자 복원
+    deid_core.py                 #   키 없는 결정론적 토큰 (암호화·키 없음)
+    protect.py                   #   [보조] 키 게이트웨이: 모든 값 토큰화 + 암호화 vault
+    reveal.py                    #   담당자 키로 vault→원본 복원 (틀린 키는 실패)
+    tokenize_value.py            #   알고 있는 값(예: 사번)의 토큰 계산 — 키 모드 레코드 조회
+    crypto_core.py               #   표준 라이브러리만으로 KDF + AEAD + 키 기반 토큰
+    pii_config.py                #   민감 필드 + 직접 식별자 구분 정의
     recognizers.py               #   값 형태 PII 탐지 · 컬럼 추론 · deny-list 인명 (자유텍스트/문서)
   evals/evals.json               #   6개 행동 평가 케이스 (문서 모드·자유텍스트 누출 포함)
 data/
@@ -27,6 +30,8 @@ tests/                           # 결정적 테스트 스위트 (LLM 불필요)
   test_protect_*.py              #   protect 통합: 자유텍스트/컬럼추론/문서/인명/퍼지/스케일
   test_column_inference.py       #   값 샘플링 컬럼 분류
   test_denylist_names.py         #   deny-list 인명 정확매칭
+  test_deid*.py                  #   keyless de-id: 코어/통합(식별자 토큰·숫자 raw·평균)
+  deid_eval.py                   #   3-way 검증: 누출 vs 평균 계산 (baseline/키/de-id)
   leakage_eval.py                #   누출 before/after 정량 (컬럼 전용 vs +recognizer)
   grade_eval.py                  #   행동 평가 자동 채점기
 skills/pii-encryption-gateway-workspace/   # iteration-1~5 평가 결과 + 비교
@@ -34,12 +39,20 @@ skills/pii-encryption-gateway-workspace/   # iteration-1~5 평가 결과 + 비�
 
 ## 동작 원리
 
-담당자마다 고유 키를 가진다. `protect.py` 가 민감 값을 결정론적 토큰
-(`[[SALARY:3f9a2c1d]]`)으로 치환하고 원본은 그 키로 암호화해 vault에 넣는다.
-LLM은 토큰만 보고 작업(안내문 작성·통지·리포트 등)을 수행한다. 작업이 끝나면
-`reveal.py` 가 같은 키로 토큰을 원본으로 복원해 **인가된 담당자에게만** 보여준다.
-키가 틀리면 복호화가 실패하므로 노출이 일어나지 않는다. 토큰은 결정론적이라 같은
-값 → 같은 토큰이며, 모델은 동일인/그룹 관계는 추론할 수 있되 실제 값은 알 수 없다.
+**기본은 keyless 비식별화(de-identification)다.** `deidentify.py` 가 **직접 식별자**
+(이름·주민번호·사번·계좌·전화·이메일 등)만 결정론적 토큰(`[[NAME:3f9a2c1d]]`)으로
+치환하고, **숫자 속성(연봉·근태)은 원본 그대로 둔다.** 그래서 LLM은 *누구의* 값인지는
+모른 채 숫자만 보고 **평균·합계·분포 같은 집계·통계를 직접 계산**할 수 있다. 원본↔토큰
+대응은 **평문 매핑**(`map.json`)에 저장되고, 작업 끝에 `reidentify.py` 가 식별자를
+복원한다. 키·암호화는 없다.
+
+**at-rest 암호화와 키 기반 접근통제**가 추가로 필요하면 더 강한 **키 게이트웨이**
+(`protect.py`/`reveal.py`)를 쓴다. 이건 식별자뿐 아니라 **숫자까지 모든 값**을 토큰화해
+키로 암호화한 vault에 넣고, 인가된 키로만 복원한다(틀린 키는 실패). 대신 숫자가 봉인되어
+**집계는 불가**하다 — 통계는 원본 대상 스크립트로 따로 계산한다.
+
+토큰은 두 모드 모두 결정론적이라 같은 값 → 같은 토큰이며, 모델은 동일인/그룹 관계는
+추론할 수 있되 실제 식별자 값은 알 수 없다.
 
 ### 무엇을, 어떻게 찾는가 (Microsoft Presidio 아키텍처를 stdlib로 이식)
 
@@ -61,39 +74,42 @@ LLM은 토큰만 보고 작업(안내문 작성·통지·리포트 등)을 수�
 
 ## 사용 예
 
+기본 — 비식별화(집계·통계 가능):
+
 ```sh
-# 1) 보호 (원본 → 토큰 + 암호화 vault)
+# 1) 비식별화 (식별자→토큰, 숫자는 원본 유지, 평문 매핑)
+python3 skills/pii-encryption-gateway/scripts/deidentify.py \
+  --in data/employees.csv --out deidentified.json --map map.json \
+  --names-from data/employees.csv      # .md/.txt 문서도 동일하게 지원
+
+# 2) LLM 이 deidentified.json 으로 작업 — 부서별 평균 연봉 등 집계를 직접 계산
+#    (이름·주민·계좌는 토큰, 연봉·근태는 raw)
+
+# 3) 출력에 식별자 토큰이 있으면 복원 (순수 집계 리포트면 생략)
+python3 skills/pii-encryption-gateway/scripts/reidentify.py \
+  --map map.json --in draft.json --out final.json
+```
+
+보조 — 키 게이트웨이(개인별 + at-rest 암호화가 필요할 때):
+
+```sh
 python3 skills/pii-encryption-gateway/scripts/protect.py \
   --key "handler-hr-alice-key-001" --in data/employees.csv \
   --out protected.json --vault vault.json
-
-# 2) LLM 이 protected.json(토큰)으로 작업, 결과를 토큰 그대로 저장 (draft.txt)
-
-# 3) 복원 (담당자 키로 토큰 → 원본)
+# ... 토큰으로 작업 후 ...
 python3 skills/pii-encryption-gateway/scripts/reveal.py \
-  --key "handler-hr-alice-key-001" --vault vault.json \
-  --in draft.txt --out final.txt
-```
-
-문서 모드(`.txt`/`.md`)와 인명 deny-list:
-
-```sh
-# 메모 문서의 PII를 봉인하고, 명부의 인명까지 함께 가린다
-python3 skills/pii-encryption-gateway/scripts/protect.py \
-  --key "handler-hr-alice-key-001" --in memo.md --out protected.md \
-  --vault vault.json --names-from data/employees.csv
+  --key "handler-hr-alice-key-001" --vault vault.json --in draft.txt --out final.txt
 ```
 
 ## 한계 (정직한 트레이드오프)
 
-- 토큰화된 민감 수치로는 **산술 연산이 불가**하다(평균 연봉 등). 집계가 필요하면
-  원본을 대상으로 스크립트로 계산해 집계값만 모델에 넘긴다.
-- protect/reveal 단계로 시간 오버헤드가 있다(약 +30초). 단 **토큰은 규모가 커지면
-  오히려 적게 든다** — baseline은 원본 전행을 컨텍스트로 읽지만 게이트웨이는 토큰만
-  보기 때문(250명 기준 baseline 대비 −10.6k 토큰, 아래 표).
+- **비식별화(기본 모드)는 숫자 값 자체를 (이름과 분리해) 노출**한다. 이게 집계를
+  가능케 하는 핵심이지만, de-linked 숫자조차 모델에 보이면 안 되는 경우엔 원본 대상
+  스크립트로 집계해 결과값만 넘긴다. **키 게이트웨이는 숫자까지 봉인**되어 집계 불가.
+- 비식별화의 복원 매핑(`map.json`)은 **평문**(키·암호화 없음)이라 원본만큼 민감하다 —
+  원본 파일처럼 보관해야 한다. 키 게이트웨이의 vault 는 대신 암호화된다.
 - 토큰이 **결정론적**이라 같은 값 → 같은 토큰이다. 그룹핑이 가능한 대신, 보호된
-  데이터만 봐도 *어떤 레코드가 같은 값을 갖는지*(동일성·빈도)는 드러난다. 근태(0~15)
-  처럼 값 범위가 좁은 필드는 빈도 패턴이 단서가 될 수 있다.
+  데이터만 봐도 *어떤 레코드가 같은 값을 갖는지*(동일성·빈도)는 드러난다.
 - **산문 속 인명**은 값 형태가 없어 recognizer로 못 잡는다. 명부 기반 deny-list로
   메우되, 명부 밖 인명은 별도 NER(선택적·미구현)이 필요하다.
   근거·대안 분석: `claudedocs/ner-integration-review.md`.
@@ -117,16 +133,19 @@ python3 skills/pii-encryption-gateway/scripts/protect.py \
 문서 모드·deny-list·확장 엔티티·유니코드) 이후에도 합격률·토큰이 회귀 없음을 확인한다.
 교차 비교: `skills/pii-encryption-gateway-workspace/iteration-comparison.md`.
 
-**(2) 결정적 테스트 스위트** — `tests/` (LLM 불필요, 15개 파일):
+**(2) 결정적 테스트 스위트** — `tests/` (LLM 불필요, 18개 파일):
 
 - `stress_test.py` — 보안 불변식 14/14 (250명 전수 + 적대적 엣지: 중복·빈값·유니코드·
   이모지·줄바꿈·토큰 위장·교차 핸들러 키). protect 250행 0.16초.
 - 값 형태 탐지 — 기본(15) · 적대적 포맷(21) · IP(6) · 유니코드 전각(9).
 - protect 통합 — 자유텍스트(13) · 컬럼추론(7) · 문서(15) · 인명(9).
+- **keyless de-id** — 코어(7) · 통합(20, 식별자 토큰·숫자 raw·평균 직접 계산·매핑 복원).
 - **퍼지(속성 기반)** — 무작위 문서 3,200개(4시드)에서 누출 0 / 왕복 정확.
 - **스케일·멱등성** — 175KB/3,000건 protect+reveal ~1.3초 / 재보호 no-op.
 - `leakage_eval.py` — 자유텍스트·미명명 컬럼 PII recall **0% → 100%**, off-format 셀
   **80% → 100%** (컬럼 전용 vs +recognizer/컬럼추론).
+- `deid_eval.py` — 집계 과제 3-way 검증: **baseline**(평균 O, 식별자 1500건 누출) ·
+  **키 게이트웨이**(누출 0, 평균 X) · **keyless de-id**(누출 0 + 평균 정확 ✓ = 목표 달성).
 
 **(3) 트리거링 정확도** — 스킬 호출 description을 30쿼리 세트로 평가(문서 모드 positive +
 까다로운 near-miss), 독립 분류기 3개 다수결 **30/30**(proxy). 기록: 워크스페이스의
