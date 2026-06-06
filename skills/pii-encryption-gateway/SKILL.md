@@ -38,8 +38,8 @@ sits:
    can sanity-check them (names only, never values).
 3. **By value shape** — the recognizers in `recognizers.py` match RRNs (dashed
    or 13-digit), phones (mobile/landline/+82, with -, ., or space separators),
-   emails, accounts, cards, and business registration numbers *mid-sentence* in
-   free-text columns and tokenize just those spans.
+   emails, accounts, cards, business registration numbers, and IPv4 addresses
+   *mid-sentence* in free-text columns and tokenize just those spans.
 
 A value-shaped match is tokenized even when its checksum is invalid; protection
 is fail-safe. (Card numbers are the one exception — a 16-digit run that fails

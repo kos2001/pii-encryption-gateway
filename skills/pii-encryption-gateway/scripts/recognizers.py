@@ -14,6 +14,10 @@ real and synthetic dumps) are still tokenized. A passing checksum only *raises*
 the score. CARD is the deliberate exception — a 16-digit run that fails Luhn is
 rejected, because false positives there are both common and expensive.
 
+Detected value-shape entities: EMAIL, RRN (dashed and no-dash), PHONE (mobile/
+landline/+82, -/./space separators), BRN (사업자등록번호), IP (IPv4), CARD,
+ACCOUNT. Plus NAME via an exact-match deny-list (find_names).
+
 No third-party dependencies, matching crypto_core's portability constraint.
 """
 
@@ -97,6 +101,9 @@ _RECOGNIZERS = [
     # Mobile (incl. +82) and landline phones; -, ., or space between groups.
     ("PHONE", re.compile(r"(?<!\d)(?:\+82[-. ]?|0)1[0-9][-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.85, None),
     ("PHONE", re.compile(r"(?<!\d)0(?:2|[3-7]\d)[-. ]?\d{3,4}[-. ]?\d{4}(?!\d)"), 0.7, None),
+    # IPv4 — octets bounded 0-255 so 3-part versions / out-of-range quads miss.
+    ("IP", re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}"
+                      r"(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])"), 0.85, None),
     ("CARD", re.compile(r"\b(?:\d{4}-){3}\d{4}\b|\b\d{16}\b"), 0.9, _card_validate),
     ("ACCOUNT", re.compile(rf"(?:{_BANKS})\s*\d{{2,6}}-\d{{2,6}}-\d{{2,6}}"), 0.9, None),
     ("ACCOUNT", re.compile(r"\b\d{2,6}-\d{2,6}-\d{2,6}\b"), 0.6, _account_validate),
