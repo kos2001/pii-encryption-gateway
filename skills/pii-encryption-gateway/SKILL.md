@@ -36,9 +36,10 @@ sits:
    column is tokenized, sealing even an odd off-format cell the per-value pass
    would miss. Auto-detected columns are listed in the protect summary so you
    can sanity-check them (names only, never values).
-3. **By value shape** — the recognizers in `recognizers.py` match RRNs, phones,
-   emails, accounts, and cards *mid-sentence* in free-text columns and tokenize
-   just those spans.
+3. **By value shape** — the recognizers in `recognizers.py` match RRNs (dashed
+   or 13-digit), phones (mobile/landline/+82, with -, ., or space separators),
+   emails, accounts, cards, and business registration numbers *mid-sentence* in
+   free-text columns and tokenize just those spans.
 
 A value-shaped match is tokenized even when its checksum is invalid; protection
 is fail-safe. (Card numbers are the one exception — a 16-digit run that fails
@@ -81,7 +82,7 @@ python protect.py --key "<handler-key>" \
 ```
 
 **Names in prose.** Recognizers seal patterned PII (RRN, phone, email, account,
-card) but not names, which have no value shape. When you know the names — in an
+card, business registration number) but not names, which have no value shape. When you know the names — in an
 HR task they sit in the roster — pass them as a deny-list so they are sealed by
 exact match too (zero false positives, still no dependency):
 
@@ -178,6 +179,6 @@ costs you the ability to group on it).
 - `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, tokenization
 - `scripts/pii_config.py` — which columns are sensitive (edit to adapt schema)
 - `scripts/recognizers.py` — value-shape PII detection (RRN/phone/email/account/
-  card) with checksum validation, column inference for renamed columns, and
-  deny-list name matching — catches PII in free-text, mis-named columns, and
-  documents
+  card/business-reg-number) with checksum validation, column inference for
+  renamed columns, and deny-list name matching — catches PII in free-text,
+  mis-named columns, and documents
