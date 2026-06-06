@@ -80,14 +80,16 @@ def _scenario_b():
     Column inference classifies the whole column from its valid majority and
     seals the off-format cells too.
 
-    Off-format phones the PHONE regex cannot match (dots / spaces as
-    separators), mixed into a clearly-phone column.
+    Off-format phones with malformed digit grouping (e.g. "010-12-34567") that
+    the PHONE regex cannot parse, mixed into a clearly-phone column. (Dot/space
+    separators are now handled by the recognizer, so the residual gap is
+    mistyped groupings — exactly what column-majority generalization rescues.)
     """
     rows = []
     leak_values = set()
     for i in range(100):
-        if i % 5 == 0:  # 20% off-format
-            v = f"010.{1000+i}.{2000+i}" if i % 2 == 0 else f"010 {1000+i} {2000+i}"
+        if i % 5 == 0:  # 20% off-format: wrong middle-group length
+            v = f"010-{i:02d}-{20000+i}"
         else:
             v = f"010-{1000+i}-{2000+i}"
         rows.append({"부서": "영업팀", "비상연락망": v})
@@ -120,7 +122,7 @@ def _scenario_b():
     total = len(rows)
     print("\n\n=== Scenario B: renamed PII column with off-format cells ===")
     print(f"{total} phones in column '비상연락망' (not an alias); "
-          f"20% use dot/space separators the regex misses\n")
+          f"20% have malformed digit grouping the per-cell regex can't parse\n")
     print(f"{'Strategy':<40}{'cells leaked':>14}{'recall':>10}")
     print("-" * 64)
     print(f"{'per-cell recognizer only (priority 1)':<40}"
