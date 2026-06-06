@@ -28,6 +28,7 @@ sys.path.insert(0, SCRIPTS)
 
 import crypto_core  # noqa: E402
 import protect as protect_mod  # noqa: E402
+import recognizers  # noqa: E402
 from pii_config import classify_field  # noqa: E402
 
 KEY = "handler-hr-alice-key-001"
@@ -73,6 +74,66 @@ def _count_leaks(protected_rows, sensitive_values):
     return sum(1 for v in sensitive_values if v and v in blob)
 
 
+def _scenario_b():
+    """Priority 2 gain: a renamed PII column whose name is not in the aliases,
+    where some cells are off-format and the per-cell recognizer misses them.
+    Column inference classifies the whole column from its valid majority and
+    seals the off-format cells too.
+
+    Off-format phones the PHONE regex cannot match (dots / spaces as
+    separators), mixed into a clearly-phone column.
+    """
+    rows = []
+    leak_values = set()
+    for i in range(100):
+        if i % 5 == 0:  # 20% off-format
+            v = f"010.{1000+i}.{2000+i}" if i % 2 == 0 else f"010 {1000+i} {2000+i}"
+        else:
+            v = f"010-{1000+i}-{2000+i}"
+        rows.append({"부서": "영업팀", "비상연락망": v})
+        leak_values.add(v)
+
+    # Per-cell only (priority 1): a value leaks if the recognizer finds no span
+    # covering it.
+    percell_leaks = 0
+    for r in rows:
+        v = r["비상연락망"]
+        spans = recognizers.analyze(v)
+        sealed = any((s.end - s.start) / len(v) >= 0.6 for s in spans)
+        if not sealed:
+            percell_leaks += 1
+
+    with tempfile.TemporaryDirectory() as d:
+        in_path = os.path.join(d, "in.json")
+        prot = os.path.join(d, "protected.json")
+        vault = os.path.join(d, "vault.json")
+        with open(in_path, "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False)
+        _stdout = sys.stdout
+        sys.stdout = open(os.devnull, "w")
+        protect_mod.protect(KEY, in_path, prot, vault)
+        sys.stdout = _stdout
+        gateway = json.load(open(prot, encoding="utf-8"))
+        gw_blob = json.dumps(gateway, ensure_ascii=False)
+        gateway_leaks = sum(1 for v in leak_values if v in gw_blob)
+
+    total = len(rows)
+    print("\n\n=== Scenario B: renamed PII column with off-format cells ===")
+    print(f"{total} phones in column '비상연락망' (not an alias); "
+          f"20% use dot/space separators the regex misses\n")
+    print(f"{'Strategy':<40}{'cells leaked':>14}{'recall':>10}")
+    print("-" * 64)
+    print(f"{'per-cell recognizer only (priority 1)':<40}"
+          f"{percell_leaks:>10}/{total:<3}{(total-percell_leaks)/total:>9.0%}")
+    print(f"{'+ column inference (priority 2)':<40}"
+          f"{gateway_leaks:>10}/{total:<3}{(total-gateway_leaks)/total:>9.0%}")
+    print("-" * 64)
+    ok = gateway_leaks == 0 and percell_leaks > 0
+    print("RESULT:", "PASS — column inference rescues off-format cells"
+          if ok else "FAIL")
+    return ok
+
+
 def run():
     rows = _load_rows(DATASET)
     sensitive = _inject_freetext(rows)
@@ -109,10 +170,12 @@ def run():
           f"{baseline_leaks - gateway_leaks} of {baseline_leaks} "
           f"({(baseline_leaks - gateway_leaks) / baseline_leaks:.0%})")
 
-    ok = gateway_leaks == 0 and baseline_leaks > 0
+    ok_a = gateway_leaks == 0 and baseline_leaks > 0
     print("\nRESULT:", "PASS — recognizer layer seals the free-text leak"
-          if ok else "FAIL")
-    return 0 if ok else 1
+          if ok_a else "FAIL")
+
+    ok_b = _scenario_b()
+    return 0 if (ok_a and ok_b) else 1
 
 
 if __name__ == "__main__":

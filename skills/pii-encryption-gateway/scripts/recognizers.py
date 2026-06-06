@@ -107,3 +107,46 @@ def analyze(text: str, threshold: float = THRESHOLD):
 
     chosen.sort(key=lambda s: s.start)
     return chosen
+
+
+# A sampled cell counts as "being" an entity (vs merely containing one in prose)
+# only when detected spans cover most of its text.
+_CELL_COVERAGE = 0.6
+# Fraction of non-empty samples that must agree on one entity type to classify
+# the whole column.
+_COLUMN_MAJORITY = 0.6
+
+
+def infer_column_type(values, sample_size: int = 50):
+    """Classify a whole column from a sample of its values (presidio-structured).
+
+    Returns (entity_type, fraction) when a majority of non-empty samples *are* a
+    single PII entity, else None. "Are" — not "contain": a cell qualifies only
+    when matched spans cover >= _CELL_COVERAGE of it, so a dedicated phone column
+    classifies while a free-text column that merely mentions phones does not.
+
+    Generalizing from the column majority lets protect.py seal an odd malformed
+    or off-format cell that the per-value recognizers would miss on its own.
+    """
+    samples = [str(v) for v in values if v not in (None, "")][:sample_size]
+    if not samples:
+        return None
+
+    type_hits = {}
+    for cell in samples:
+        spans = analyze(cell)
+        # A dedicated PII column holds ONE entity per cell. A cell with several
+        # spans (e.g. a phone AND an email) is composite free text, not a column
+        # of one entity — exclude it so such columns stay span-level.
+        if len(spans) != 1:
+            continue
+        span = spans[0]
+        if (span.end - span.start) / len(cell) < _CELL_COVERAGE:
+            continue  # the value is a fragment of prose, not the cell's identity
+        type_hits[span.entity_type] = type_hits.get(span.entity_type, 0) + 1
+
+    if not type_hits:
+        return None
+    best = max(type_hits, key=type_hits.get)
+    fraction = type_hits[best] / len(samples)
+    return (best, fraction) if fraction >= _COLUMN_MAJORITY else None
