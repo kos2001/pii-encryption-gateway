@@ -1,11 +1,17 @@
 """Which fields count as sensitive, and the token type used for each.
 
-This is the single place that decides what gets protected. Field names are
-matched case-insensitively against both the exact column name and a set of
-substring aliases, so the same config works on Korean HR exports whether a
-column is called "연봉", "salary", or "기본연봉".
+This is the column-name layer of protection. Field names are matched
+case-insensitively against both the exact column name and a set of substring
+aliases, so the same config works on Korean HR exports whether a column is
+called "연봉", "salary", or "기본연봉".
 
-To adapt the gateway to a different dataset, edit SENSITIVE_FIELDS only.
+A value still gets protected even when its column name is not listed here:
+recognizers.py is a second pass that detects PII by value shape (RRN, phone,
+email, account, card) inside any non-classified column, including free-text.
+This file controls the *column-name* net; recognizers.py is the value-shape net.
+
+To adapt the gateway to a different dataset, edit SENSITIVE_FIELDS (column
+names) and/or add recognizers to recognizers.py (value patterns).
 """
 
 # token_type -> list of column-name aliases (substring, case-insensitive match)

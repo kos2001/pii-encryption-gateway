@@ -27,6 +27,23 @@ value with a stable token like `[[SALARY:3f9a2c1d]]` and encrypts the originals
 into a vault. You work entirely with tokens. A second tool decrypts the tokens
 back into real values at the very end, for the authorized handler only.
 
+Sensitive values are caught three ways, so PII is protected no matter where it
+sits:
+
+1. **By column name** — the schema in `pii_config.py`.
+2. **By column shape** — `protect.py` value-samples each unlisted column; if its
+   cells *are* a single PII entity (a renamed phone or RRN column), the whole
+   column is tokenized, sealing even an odd off-format cell the per-value pass
+   would miss. Auto-detected columns are listed in the protect summary so you
+   can sanity-check them (names only, never values).
+3. **By value shape** — the recognizers in `recognizers.py` match RRNs, phones,
+   emails, accounts, and cards *mid-sentence* in free-text columns and tokenize
+   just those spans.
+
+A value-shaped match is tokenized even when its checksum is invalid; protection
+is fail-safe. (Card numbers are the one exception — a 16-digit run that fails
+Luhn is treated as a false positive and left alone.)
+
 ## The one rule that matters
 
 **Never open the raw input file.** Do not `cat`, `Read`, `head`, `grep`, or
@@ -134,3 +151,6 @@ costs you the ability to group on it).
   a sensitive reference (e.g. a 사번) without reading the raw file
 - `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, tokenization
 - `scripts/pii_config.py` — which columns are sensitive (edit to adapt schema)
+- `scripts/recognizers.py` — value-shape PII detection (RRN/phone/email/account/
+  card) with checksum validation, plus column inference for renamed columns —
+  catches PII in free-text or mis-named columns
