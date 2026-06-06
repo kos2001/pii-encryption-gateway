@@ -10,14 +10,17 @@ skills/pii-encryption-gateway/   # 스킬 본체
   SKILL.md                       #   동작 규율 (원본 파일을 읽지 않는다)
   scripts/
     crypto_core.py               #   표준 라이브러리만으로 KDF + AEAD + 결정론적 토큰
-    protect.py                   #   민감 필드 → 토큰, 원본은 키로 암호화해 vault에
+    protect.py                   #   민감 필드 → 토큰 (CSV/JSON 구조 + .txt/.md 문서 모드)
     reveal.py                    #   담당자 키로 토큰 → 원본 복원 (틀린 키는 실패)
     tokenize_value.py            #   알고 있는 값(예: 사번)의 토큰 계산 — 원본 안 읽고 레코드 조회
-    pii_config.py                #   어떤 컬럼이 민감한지 정의 (사번 포함)
-  evals/evals.json               #   4개 평가 케이스
+    pii_config.py                #   어떤 컬럼이 민감한지 정의 (컬럼명 기준)
+    recognizers.py               #   값 형태 기반 PII 탐지 + 컬럼 추론 (자유텍스트/오타 컬럼)
+  evals/evals.json               #   6개 평가 케이스 (문서 모드·자유텍스트 누출 포함)
 data/
-  generate_data.py               # 한국식 HR 합성 데이터 생성 (seed 고정, 40명)
+  generate_data.py               # 한국식 HR 합성 데이터 생성 (seed 고정; --freetext 변형)
   employees.csv / .json          # 생성된 합성 데이터 (실제 인물 아님)
+  employees_freetext.csv         # 자유서술 '비고' 칼럼에 PII 매립 (누출 평가용)
+  incident_memo.md               # 문서 모드 평가용 합성 메모
 tests/grade_eval.py              # 누출/정확도 자동 채점기
 skills/pii-encryption-gateway-workspace/   # iteration-1, iteration-2 평가 결과
 ```
