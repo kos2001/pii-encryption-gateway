@@ -1,0 +1,21 @@
+{
+  "eval_name": "salary-notice",
+  "expectations": [
+    {
+      "text": "draft.txt (model working copy) contains NO raw sensitive value from the dataset",
+      "passed": true,
+      "evidence": "no raw PII found in draft"
+    },
+    {
+      "text": "final.txt contains E0007's real name and real salary value",
+      "passed": true,
+      "evidence": "name(신다은)=Y, salary(3194만원)=Y"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "total": 2,
+    "pass_rate": 1.0
+  }
+}

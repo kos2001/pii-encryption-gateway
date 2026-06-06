@@ -184,7 +184,18 @@ def _grade_incident_memo(draft, final, add):
 
 
 def _write(args, expectations):
-    result = {"eval_name": args.eval_name, "expectations": expectations}
+    passed = sum(e["passed"] for e in expectations)
+    total = len(expectations)
+    result = {
+        "eval_name": args.eval_name,
+        "expectations": expectations,
+        "summary": {
+            "passed": passed,
+            "failed": total - passed,
+            "total": total,
+            "pass_rate": (passed / total) if total else 0.0,
+        },
+    }
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
     passed = sum(e["passed"] for e in expectations)
