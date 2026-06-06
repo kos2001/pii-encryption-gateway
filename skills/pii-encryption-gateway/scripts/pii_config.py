@@ -41,3 +41,20 @@ def classify_field(column_name: str):
             if alias.lower() in lowered:
                 return token_type
     return None
+
+
+# Direct identifiers — fields that point at a specific person. The keyless
+# de-identification mode (deidentify.py) tokenizes ONLY these and leaves numeric
+# attributes (SALARY, LATE, ABSENCE, LEAVE) raw, so the model can still compute
+# aggregates (averages, sums) over them. CARD/BRN/IP are recognizer-only types.
+IDENTIFIER_TYPES = {"EMPNO", "NAME", "RRN", "PHONE", "EMAIL", "ACCOUNT", "CARD", "BRN", "IP"}
+
+
+def classify_identifier(column_name: str):
+    """Return the token type only if the column is a DIRECT IDENTIFIER, else None.
+
+    Numeric/analytic sensitive fields (연봉·근태) classify under classify_field
+    but are deliberately excluded here so they remain raw for analysis.
+    """
+    t = classify_field(column_name)
+    return t if t in IDENTIFIER_TYPES else None
