@@ -14,7 +14,7 @@ skills/pii-encryption-gateway/   # 스킬 본체
     reveal.py                    #   담당자 키로 토큰 → 원본 복원 (틀린 키는 실패)
     tokenize_value.py            #   알고 있는 값(예: 사번)의 토큰 계산 — 원본 안 읽고 레코드 조회
     pii_config.py                #   어떤 컬럼이 민감한지 정의 (컬럼명 기준)
-    recognizers.py               #   값 형태 기반 PII 탐지 + 컬럼 추론 (자유텍스트/오타 컬럼)
+    recognizers.py               #   값 형태 PII 탐지 + 컬럼 추론 + deny-list 인명 (자유텍스트/문서)
   evals/evals.json               #   6개 평가 케이스 (문서 모드·자유텍스트 누출 포함)
 data/
   generate_data.py               # 한국식 HR 합성 데이터 생성 (seed 고정; --freetext 변형)

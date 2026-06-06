@@ -80,9 +80,20 @@ python protect.py --key "<handler-key>" \
     --in memo.md --out protected.md --vault vault.json
 ```
 
-Note this is recognizer-only: it seals patterned PII (RRN, phone, email,
-account, card), not names in prose, which have no pattern. Don't claim a
-document is name-safe — say plainly that names are not detected.
+**Names in prose.** Recognizers seal patterned PII (RRN, phone, email, account,
+card) but not names, which have no value shape. When you know the names — in an
+HR task they sit in the roster — pass them as a deny-list so they are sealed by
+exact match too (zero false positives, still no dependency):
+
+```bash
+python protect.py --key "<handler-key>" --in memo.md --out protected.md \
+    --vault vault.json --names-from employees.csv   # or --names "최민준,신다은"
+```
+
+`--names-from` reads the roster's name column; `--names` takes an explicit list.
+This catches *known* names only. A third party not in the roster still won't be
+detected — don't claim a document is name-safe for arbitrary names; say plainly
+that only the supplied names are sealed.
 
 ### 2. Do the task on tokens
 
@@ -167,5 +178,6 @@ costs you the ability to group on it).
 - `scripts/crypto_core.py` — stdlib-only key derivation, AEAD, tokenization
 - `scripts/pii_config.py` — which columns are sensitive (edit to adapt schema)
 - `scripts/recognizers.py` — value-shape PII detection (RRN/phone/email/account/
-  card) with checksum validation, plus column inference for renamed columns —
-  catches PII in free-text or mis-named columns
+  card) with checksum validation, column inference for renamed columns, and
+  deny-list name matching — catches PII in free-text, mis-named columns, and
+  documents

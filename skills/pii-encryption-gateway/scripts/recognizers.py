@@ -78,13 +78,23 @@ _RECOGNIZERS = [
 ]
 
 
-def analyze(text: str, threshold: float = THRESHOLD):
-    """Return non-overlapping PII Spans in `text` scoring >= threshold.
+def _resolve_overlaps(candidates):
+    """Greedily keep non-overlapping spans by (score desc, length desc,
+    position): the strongest, longest claim on a stretch of text wins, so a
+    full 16-digit CARD beats the ACCOUNT pattern matching its first 12 digits."""
+    candidates = sorted(candidates, key=lambda s: (-s.score, -(s.end - s.start), s.start))
+    chosen, occupied = [], []
+    for span in candidates:
+        if any(span.start < e and o < span.end for o, e in occupied):
+            continue
+        chosen.append(span)
+        occupied.append((span.start, span.end))
+    chosen.sort(key=lambda s: s.start)
+    return chosen
 
-    Overlaps are resolved greedily by (score desc, length desc, position): the
-    strongest, longest claim on a stretch of text wins, so a full 16-digit CARD
-    beats the ACCOUNT pattern that matches its first 12 digits.
-    """
+
+def analyze(text: str, threshold: float = THRESHOLD):
+    """Return non-overlapping value-shape PII Spans in `text` scoring >= threshold."""
     candidates = []
     for entity_type, pattern, base, validate in _RECOGNIZERS:
         for m in pattern.finditer(text):
@@ -95,18 +105,26 @@ def analyze(text: str, threshold: float = THRESHOLD):
                     continue
             if score >= threshold:
                 candidates.append(Span(m.start(), m.end(), entity_type, score))
+    return _resolve_overlaps(candidates)
 
-    candidates.sort(key=lambda s: (-s.score, -(s.end - s.start), s.start))
-    chosen = []
-    occupied = []
-    for span in candidates:
-        if any(span.start < e and o < span.end for o, e in occupied):
-            continue
-        chosen.append(span)
-        occupied.append((span.start, span.end))
 
-    chosen.sort(key=lambda s: s.start)
-    return chosen
+def find_names(text: str, names, score: float = 0.99):
+    """Return non-overlapping NAME spans for exact occurrences of known `names`.
+
+    Names carry no value-shape pattern, so the recognizers can't find them; but
+    in an HR context they are known (the roster the handler holds). Exact
+    substring match means zero false positives and no model — Presidio's
+    PatternRecognizer(deny_list=...). Longest names are matched first so
+    "김민준" wins over "민준"; substring match seals "장지민" inside "장지민이"
+    while the trailing particle stays.
+    """
+    candidates = []
+    for name in sorted({n for n in names if n}, key=len, reverse=True):
+        start = text.find(name)
+        while start != -1:
+            candidates.append(Span(start, start + len(name), "NAME", score))
+            start = text.find(name, start + len(name))
+    return _resolve_overlaps(candidates)
 
 
 # A sampled cell counts as "being" an entity (vs merely containing one in prose)
