@@ -1,7 +1,33 @@
-# private_protection
+# pii-encryption-gateway
+
+<p><strong lang="ko">한국어</strong> · <a href="README.en.md" lang="en">English</a></p>
 
 민감 개인정보(사번·연봉·근태·주민등록번호·계좌·전화·이메일·카드·사업자번호·IP 등)를
-**LLM에 노출하지 않고** 처리하기 위한 스킬과, 그 성능을 검증하는 합성 데이터 / 평가 하니스.
+**LLM에 노출하지 않고** 처리하기 위한 Claude Code 스킬과, 그 성능을 검증하는 합성 데이터 / 평가 하니스.
+(이전 저장소 이름: `private_protection`)
+
+## 빠른 시작
+
+Python 3.10+ 만 있으면 된다 (표준 라이브러리만 사용, 외부 의존성·LLM 호출 없음).
+
+```sh
+# 1) 합성 HR 데이터 생성 (seed 고정 → 저장소의 data/ 와 동일한 결과)
+python3 data/generate_data.py --count 250 --freetext
+
+# 2) 보안 불변식 스트레스 테스트 (14개, 250명 전수 + 적대적 엣지)
+python3 tests/stress_test.py
+
+# 3) 비식별화 → LLM 작업 → 복원 (기본 모드)
+python3 skills/pii-encryption-gateway/scripts/deidentify.py \
+  --in data/employees.csv --out deidentified.json --map map.json \
+  --names-from data/employees.csv
+python3 skills/pii-encryption-gateway/scripts/reidentify.py \
+  --map map.json --in draft.json --out final.json
+```
+
+나머지 결정적 테스트는 각 파일을 그대로 실행한다(예: `python3 tests/test_recognizers.py`,
+`python3 tests/deid_eval.py`). 스킬로 쓰려면 `skills/pii-encryption-gateway/` 를
+`~/.claude/skills/` 아래에 복사한다.
 
 ## 구성
 
@@ -153,3 +179,7 @@ python3 skills/pii-encryption-gateway/scripts/reveal.py \
 
 재현: `python3 data/generate_data.py --count 250 --freetext` → `python3 tests/stress_test.py`.
 행동 평가 채점은 `tests/grade_eval.py`. 평가 뷰어는 Python 3.10+ 필요.
+
+## 라이선스
+
+[MIT](LICENSE) — Copyright (c) 2026 kos2001
